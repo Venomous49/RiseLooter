@@ -3,142 +3,81 @@ name: Creator runtime smoke
 on:
   push:
     paths:
-      - 'index.html'
       - 'worker.js'
-      - 'creator-cache-v23.js'
-      - 'creator-hd.css'
-      - 'wrangler.jsonc'
-      - '.assetsignore'
-      - 'assets/creator/**'
-      - 'scripts/creator_runtime_smoke.mjs'
-      - '.github/workflows/creator-runtime-smoke.yml'
+      - 'fixed-stage-home.js'
+      - 'evolution-test-mode.js'
+      - 'cpx-integration.js'
+      - '01-debutant.webp'
+      - '05-debrouillard.webp'
+      - '10-chasseur.webp'
+      - '15-hustler.webp'
+      - '20-pro.webp'
+      - '30-elite.webp'
+      - '40-cyber-looter.webp'
+      - '50-rise-looter.webp'
+      - 'female-01-debutant.webp'
+      - 'female-05-debrouillard.webp'
+      - 'female-10-chasseur.webp'
+      - 'female-15-hustler.webp'
+      - 'female-20-pro.webp'
+      - 'female-30-elite.webp'
+      - 'female-40-cyber-looter.webp'
+      - 'female-50-rise-looter.webp'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: creator-runtime-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  local-smoke:
+  production-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Playwright
-        run: |
-          npm install --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Start static site
-        shell: bash
-        run: |
-          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/rise-looter-http.log 2>&1 &
-          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/index.html >/dev/null && exit 0; sleep 1; done
-          cat /tmp/rise-looter-http.log
-          exit 1
-      - name: Exercise all creator controls locally in Chromium
-        run: node scripts/creator_runtime_smoke.mjs
-
-  production-smoke:
-    needs: local-smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
     env:
-      CREATOR_PUBLIC_ORIGIN: https://loot-up.marin-iglesias.workers.dev
-      CREATOR_SMOKE_URL: https://loot-up.marin-iglesias.workers.dev/?creatorTest=1
+      PUBLIC_ORIGIN: https://loot-up.marin-iglesias.workers.dev
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Playwright
-        run: |
-          npm install --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Wait for dedicated fullbody creator deployment
+
+      - name: Wait for canonical stage deployment
         shell: bash
         run: |
           set -euo pipefail
           for i in {1..60}; do
             headers="$(mktemp)"
-            if curl -fsS -D "$headers" -o /tmp/rise-looter-public.html "${CREATOR_PUBLIC_ORIGIN}/?creatorTest=1&ci=${GITHUB_SHA}"; then
-              if grep -qi '^x-riselooter-creator-source: validated' "$headers" \
-                && grep -qi '^x-riselooter-creator-version: dedicated-fullbody-v23' "$headers" \
-                && grep -q 'id="creatorPreview"' /tmp/rise-looter-public.html \
-                && grep -q 'creator-hd.css?v=22' /tmp/rise-looter-public.html \
-                && grep -q 'creator-cache-v23.js?v=23' /tmp/rise-looter-public.html \
-                && ! grep -q 'creator-safe-runtime.js' /tmp/rise-looter-public.html; then
+            if curl -fsS -D "$headers" -o /tmp/public.html "${PUBLIC_ORIGIN}/?ci=${GITHUB_SHA}"; then
+              if grep -qi '^x-riselooter-creator-source: canonical-stage-images' "$headers" \
+                && grep -qi '^x-riselooter-creator-version: base-hq-realesrgan-v2' "$headers" \
+                && grep -q 'fixed-stage-home.js?v=base-hq-realesrgan-v2' /tmp/public.html \
+                && grep -q 'evolution-test-mode.js?v=survey-only-2' /tmp/public.html; then
                 rm -f "$headers"
                 exit 0
               fi
             fi
             rm -f "$headers"
-            sleep 10
+            sleep 5
           done
+          echo 'Canonical fixed-stage deployment did not become visible in time.'
           exit 1
-      - name: Verify cache-busting creator runtime is public
+
+      - name: Verify all 16 public stage assets match main
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -o /tmp/creator-cache-public.js "${CREATOR_PUBLIC_ORIGIN}/creator-cache-v23.js?ci=${GITHUB_SHA}"
-          test "$(sha256sum creator-cache-v23.js | awk '{print $1}')" = "$(sha256sum /tmp/creator-cache-public.js | awk '{print $1}')"
-          grep -q "fullbody23" /tmp/creator-cache-public.js
-      - name: Verify fullbody creator stylesheet is public
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -o /tmp/creator-hd-public.css "${CREATOR_PUBLIC_ORIGIN}/creator-hd.css?ci=${GITHUB_SHA}"
-          test "$(sha256sum creator-hd.css | awk '{print $1}')" = "$(sha256sum /tmp/creator-hd-public.css | awk '{print $1}')"
-          grep -q 'aspect-ratio:1728/910' /tmp/creator-hd-public.css
-          grep -q 'object-fit:contain' /tmp/creator-hd-public.css
-          ! grep -q 'mix-blend-mode' /tmp/creator-hd-public.css
-          ! grep -q 'rl-avatar-stack' /tmp/creator-hd-public.css
-      - name: Verify all 250 public creator assets match this commit
-        shell: bash
-        run: |
-          set -euo pipefail
+          files=(01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp)
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
-          mismatches=0
-          checked=0
-          while IFS= read -r path; do
-            checked=$((checked + 1))
-            remote="$tmpdir/asset-$checked.webp"
-            if ! curl -fsS --retry 3 --retry-delay 2 -o "$remote" "${CREATOR_PUBLIC_ORIGIN}/${path}?v=fullbody23&ci=${GITHUB_SHA}"; then
-              mismatches=$((mismatches + 1)); continue
-            fi
-            test "$(sha256sum "$path" | awk '{print $1}')" = "$(sha256sum "$remote" | awk '{print $1}')" || mismatches=$((mismatches + 1))
-          done < <(find assets/creator/male assets/creator/female -type f -name '*.webp' | sort)
-          test "$checked" -eq 250
-          test "$mismatches" -eq 0
-      - name: Exercise all 250 creator combinations on Cloudflare
-        run: node scripts/creator_runtime_smoke.mjs
-      - name: Record validated production creator status
-        if: success()
+          for f in "${files[@]}"; do
+            curl -fsS --retry 3 --retry-delay 2 -o "$tmpdir/$f" "${PUBLIC_ORIGIN}/$f?ci=${GITHUB_SHA}"
+            test "$(sha256sum "$f" | awk '{print $1}')" = "$(sha256sum "$tmpdir/$f" | awk '{print $1}')" || { echo "Public asset mismatch: $f"; exit 1; }
+          done
+
+      - name: Verify CPX endpoint is server-side and protected
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          git checkout -B main origin/main
-          printf 'status=success\nsource_commit=%s\nformat=1728x910\nassets=250\ncloudflare=validated\nruntime_combinations=250\ncreator_version=dedicated-fullbody-v23\nasset_cache=fullbody23\n' "$GITHUB_SHA" > creator-production-status.txt
-          git add creator-production-status.txt
-          git diff --cached --quiet || (git commit -m 'Record validated creator production deployment' && git push origin main)
-      - name: Record production creator failure
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          git checkout -B main origin/main
-          printf 'status=failed\nsource_commit=%s\ncloudflare=not-validated\ncreator_version=dedicated-fullbody-v23\nasset_cache=fullbody23\n' "$GITHUB_SHA" > creator-production-status.txt
-          git add creator-production-status.txt
-          git diff --cached --quiet || (git commit -m 'Record failed creator production deployment' && git push origin main)
+          code=$(curl -sS -o /tmp/cpx.json -w '%{http_code}' "${PUBLIC_ORIGIN}/api/cpx/postback")
+          test "$code" = '400' || test "$code" = '503'
+          grep -Eq 'missing/invalid parameters|CPX secret not configured' /tmp/cpx.json
