@@ -29,45 +29,64 @@ on:
       - 'female-40-cyber-looter.webp'
       - 'female-50-rise-looter.webp'
       - '.github/workflows/deploy-cloudflare.yml'
-  pull_request:
-    types: [opened]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  deploy:
-    if: github.event_name != 'pull_request' || github.event.pull_request.title == 'Trigger all 16 assets 4K production run'
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    timeout-minutes: 15
+    outputs:
+      enhance: ${{ steps.detect.outputs.run }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Verify all 16 canonical character assets
         shell: bash
         run: |
           set -euo pipefail
           files=(01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp)
           for f in "${files[@]}"; do test -s "$f" || { echo "Missing asset: $f"; exit 1; }; done
-
       - name: Detect one-time enhancement request
-        id: enhance
+        id: detect
         shell: bash
         run: |
           if [ -f .asset-enhance-all ]; then echo 'run=true' >> "$GITHUB_OUTPUT"; else echo 'run=false' >> "$GITHUB_OUTPUT"; fi
 
-      - name: Install image restoration dependencies
-        if: steps.enhance.outputs.run == 'true'
+  enhance:
+    needs: prepare
+    if: needs.prepare.outputs.enhance == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        file:
+          - 01-debutant.webp
+          - 05-debrouillard.webp
+          - 10-chasseur.webp
+          - 15-hustler.webp
+          - 20-pro.webp
+          - 30-elite.webp
+          - 40-cyber-looter.webp
+          - 50-rise-looter.webp
+          - female-01-debutant.webp
+          - female-05-debrouillard.webp
+          - female-10-chasseur.webp
+          - female-15-hustler.webp
+          - female-20-pro.webp
+          - female-30-elite.webp
+          - female-40-cyber-looter.webp
+          - female-50-rise-looter.webp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Install 4K restoration dependencies
         shell: bash
         run: |
           set -euo pipefail
@@ -76,51 +95,84 @@ jobs:
           wget -q https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-ubuntu.zip -O /tmp/realesrgan.zip
           unzip -q /tmp/realesrgan.zip -d /tmp/realesrgan
           chmod +x /tmp/realesrgan/realesrgan-ncnn-vulkan
+      - name: Enhance one canonical asset to 3072x4096
+        shell: bash
+        env:
+          FILE: ${{ matrix.file }}
+        run: |
+          set -euo pipefail
+          dims=$(webpinfo "$FILE" 2>/dev/null | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print w"x"h}')
+          if [ "$dims" = "3072x4096" ]; then
+            echo "Already 4K: $FILE"
+          else
+            base="${FILE%.webp}"
+            dwebp "$FILE" -o "/tmp/${base}.png" >/dev/null
+            /tmp/realesrgan/realesrgan-ncnn-vulkan -i "/tmp/${base}.png" -o "/tmp/${base}-4k.png" -n realesrgan-x4plus -s 4 -f png
+            cwebp -quiet -q 100 -m 6 -sharp_yuv -resize 3072 4096 "/tmp/${base}-4k.png" -o "$FILE"
+          fi
+          final_dims=$(webpinfo "$FILE" 2>/dev/null | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print w"x"h}')
+          echo "$FILE => $final_dims"
+          [ "$final_dims" = "3072x4096" ] || { echo "Unexpected final dimensions: $final_dims"; exit 1; }
+      - name: Checkpoint completed 4K asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-${{ matrix.file }}
+          path: ${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
 
-      - name: Enhance and checkpoint each current character master to 4K
-        if: steps.enhance.outputs.run == 'true'
+  publish:
+    needs: [prepare, enhance]
+    if: always() && needs.prepare.result == 'success' && (needs.prepare.outputs.enhance != 'true' || needs.enhance.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Download all completed 4K assets
+        if: needs.prepare.outputs.enhance == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: asset-*
+          path: .
+          merge-multiple: true
+      - name: Verify 16 final 4K assets
+        if: needs.prepare.outputs.enhance == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/riselooter4k
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           files=(01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp)
           for f in "${files[@]}"; do
-            current_dims=$(webpinfo "$f" 2>/dev/null | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print w"x"h}')
-            if [ "$current_dims" = "3072x4096" ]; then
-              echo "SKIP already checkpointed: $f => $current_dims"
-              continue
-            fi
-            base="${f%.webp}"
-            dwebp "$f" -o "/tmp/${base}.png" >/dev/null
-            /tmp/realesrgan/realesrgan-ncnn-vulkan -i "/tmp/${base}.png" -o "/tmp/riselooter4k/${base}.png" -n realesrgan-x4plus -s 4 -f png
-            cwebp -quiet -q 100 -m 6 -sharp_yuv -resize 3072 4096 "/tmp/riselooter4k/${base}.png" -o "$f"
             dims=$(webpinfo "$f" 2>/dev/null | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print w"x"h}')
             echo "$f => $dims"
-            [ "$dims" = "3072x4096" ] || { echo "Unexpected final dimensions for $f: $dims"; exit 1; }
-            git add "$f"
-            git commit -m "Checkpoint 4K asset $f [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
-            echo "CHECKPOINT SAVED: $f"
+            [ "$dims" = "3072x4096" ] || exit 1
           done
+      - name: Commit all 16 4K masters at canonical paths
+        if: needs.prepare.outputs.enhance == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           rm -f .asset-enhance-all
-          git add .asset-enhance-all
+          git add 01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp .asset-enhance-all
           if ! git diff --cached --quiet; then
-            git commit -m 'Complete resumable 4K asset enhancement [skip ci]'
+            git commit -m 'Publish all 16 parallel 4K character masters [skip ci]'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
-
       - name: Verify Cloudflare token
         shell: bash
         run: |
           set -euo pipefail
           curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify > /tmp/userverify.json
           node -e "const d=require('/tmp/userverify.json'); process.exit(d.success?0:1)"
-
-      - name: Deploy current workspace to Cloudflare
+      - name: Deploy current 4K workspace to Cloudflare
         id: deploy
         shell: bash
         run: |
@@ -128,10 +180,8 @@ jobs:
           npx --yes wrangler@4 deploy > /tmp/wrangler-deploy.log 2>&1
           code=$?
           set -e
-
           sed -E 's/(cfut_|cfat_)[A-Za-z0-9_-]+/[REDACTED_TOKEN]/g' /tmp/wrangler-deploy.log | tail -n 160 > cloudflare-deploy-log.txt
           if [ "$code" -eq 0 ]; then echo 'outcome=success' >> "$GITHUB_OUTPUT"; else echo 'outcome=failure' >> "$GITHUB_OUTPUT"; fi
-
       - name: Record Cloudflare result
         if: always()
         env:
@@ -140,12 +190,11 @@ jobs:
         run: |
           set -euo pipefail
           outcome='${{ steps.deploy.outputs.outcome }}'; [ -n "$outcome" ] || outcome='failure'
-          printf 'status=%s\nsource_commit=%s\nstage_version=all-assets-4k-resumable-v4\ncharacter_assets=16\nfinal_dimensions=3072x4096\ncheckpoint_per_asset=yes\ntimeout_minutes=360\nrollback_source=disabled\n' "$outcome" "$TRIGGER_SHA" > cloudflare-deploy-status.txt
+          printf 'status=%s\nsource_commit=%s\nstage_version=all-assets-4k-parallel-v5\ncharacter_assets=16\nfinal_dimensions=3072x4096\nparallel_jobs=16\nmax_parallel=8\nartifact_checkpoint=yes\nrollback_source=disabled\n' "$outcome" "$TRIGGER_SHA" > cloudflare-deploy-status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare-deploy-status.txt cloudflare-deploy-log.txt
           git diff --cached --quiet || (git commit -m 'Record Cloudflare deployment diagnostics [skip ci]' && git pull --rebase origin main && git push origin HEAD:main)
-
-      - name: Fail on deployment failure
+      - name: Fail on Cloudflare deployment failure
         if: steps.deploy.outputs.outcome != 'success'
         run: exit 1
