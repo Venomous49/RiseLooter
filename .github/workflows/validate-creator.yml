@@ -5,14 +5,25 @@ on:
     paths:
       - 'index.html'
       - 'worker.js'
-      - 'creator-hd.css'
-      - 'assets/creator/**'
-      - 'assets/creator_sources/**'
-      - 'scripts/build_creator_fullbody_hd_v3.py'
-      - 'scripts/validate_creator_library.py'
-      - 'scripts/validate_creator_library_hd.py'
-      - 'scripts/creator_runtime_smoke.mjs'
-      - '.github/workflows/**'
+      - 'fixed-stage-home.js'
+      - 'evolution-test-mode.js'
+      - 'cpx-integration.js'
+      - '01-debutant.webp'
+      - '05-debrouillard.webp'
+      - '10-chasseur.webp'
+      - '15-hustler.webp'
+      - '20-pro.webp'
+      - '30-elite.webp'
+      - '40-cyber-looter.webp'
+      - '50-rise-looter.webp'
+      - 'female-01-debutant.webp'
+      - 'female-05-debrouillard.webp'
+      - 'female-10-chasseur.webp'
+      - 'female-15-hustler.webp'
+      - 'female-20-pro.webp'
+      - 'female-30-elite.webp'
+      - 'female-40-cyber-looter.webp'
+      - 'female-50-rise-looter.webp'
       - 'wrangler.jsonc'
       - '.assetsignore'
   workflow_dispatch:
@@ -25,111 +36,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install --quiet 'numpy<3' pillow opencv-python-headless
-      - name: Validate all 250 pre-rendered creator assets and UI routing
-        run: |
-          python scripts/validate_creator_library.py
-          python scripts/validate_creator_library_hd.py
 
-      - name: Require one fixed full-body male base
+      - name: Validate all 16 canonical stage assets exist
         shell: bash
         run: |
           set -euo pipefail
-          generator=scripts/build_creator_fullbody_hd_v3.py
-          validator=scripts/validate_creator_library_hd.py
-          grep -q 'def build_locked_presets' "$generator"
-          grep -q 'fixed_body, skin_alpha = robust_canonical_body(gender)' "$generator"
-          grep -q 'Male body lock violated by hairstyle' "$generator"
-          grep -q 'aligned_alpha\[330:, :\] = 0' "$generator"
-          grep -q 'male full-body base changed outside head' "$validator"
-          grep -q 'MALE_BODY_Y0 = 350' "$validator"
-          grep -q 'male_full_body_locked=yes' .github/workflows/build-real-creator.yml
-          grep -q 'male_hair_never_below_head=yes' .github/workflows/build-real-creator.yml
+          files=(01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp)
+          for f in "${files[@]}"; do test -s "$f" || { echo "Missing canonical asset: $f"; exit 1; }; done
 
-      - name: Reject workflows that can rewrite production creator routing
+      - name: Validate fixed-stage production routing
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -R --line-number --fixed-strings 'patch_riselooter.py' .github/workflows
-          ! grep -R --line-number -E 'python(3)? scripts/(activate_real_creator|apply_creator_interface|enable_creator_test|final_site_cleanup|remove_creator_overlays)\.py' .github/workflows
-          ! grep -R --line-number -E 'git add([^\n]*[[:space:]])?index\.html|git add[^\n]*\.html' .github/workflows
+          grep -q "x-riselooter-creator-source', 'canonical-stage-images'" worker.js
+          grep -q "x-riselooter-creator-version', 'base-hq-realesrgan-v2'" worker.js
+          grep -q 'fixed-stage-home.js?v=base-hq-realesrgan-v2' worker.js
+          grep -q 'evolution-test-mode.js?v=survey-only-2' worker.js
+          grep -q 'cpx-integration.js?v=cpx-35504-v1' worker.js
+          grep -q "url.pathname === '/api/cpx/postback'" worker.js
+          grep -q 'rpc/apply_partner_reward' worker.js
+          grep -q 'CPX_SECURITY_HASH' worker.js
+          grep -q 'SUPABASE_SERVICE_ROLE_KEY' worker.js
+          grep -q 'SUPABASE_URL' worker.js
 
-          grep -q 'git diff --exit-code -- index.html' .github/workflows/fix-riselooter-assets.yml
-          grep -q 'test "$(git status --short index.html | wc -l)" -eq 0' .github/workflows/fix-riselooter-assets.yml
-          grep -q 'node scripts/creator_runtime_smoke.mjs' .github/workflows/build-real-creator.yml
-          grep -q 'git diff --exit-code -- index.html worker.js creator-hd.css wrangler.jsonc .assetsignore' .github/workflows/build-real-creator.yml
-          grep -q 'Publish only fully validated creator assets' .github/workflows/build-real-creator.yml
-
-          test ! -e .github/workflows/one-shot-harden-creator-fallback.yml
-          test ! -e .github/workflows/one-shot-source-fallback-fix.yml
-          test ! -e .github/workflows/apply-creator-routing.yml
-          test ! -e .github/workflows/normalize-creator-render.yml
-          test ! -e .github/workflows/creator-hd-rebuild.yml
-          test ! -e .github/workflows/build-creator-hair-overlays.yml
-          test ! -e .github/workflows/build-creator-skin-masks.yml
-          test ! -e .github/workflows/build-fullbody-creator.yml
-          test ! -e .github/workflows/validate-creator-assets-strict.yml
-
-      - name: Reject runtime overlay regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          ! grep -q 'rl-avatar-stack' creator-hd.css
-          ! grep -q 'mix-blend-mode' creator-hd.css
-          ! grep -q 'mask-' creator-hd.css
-          ! grep -q 'creator-safe-runtime.js' worker.js
-          ! grep -q 'creator-safe-runtime.js' index.html
-          grep -q 'creator-real-preview' creator-hd.css
-          grep -q 'hair-thumb img' creator-hd.css
-
-      - name: Reject shared-face compositing regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          ! grep -q 'def canonical_face_patch' scripts/build_creator_from_hairstyle_masters.py
-          ! grep -q 'def apply_canonical_face' scripts/build_creator_from_hairstyle_masters.py
-          ! grep -q 'output = apply_canonical_face' scripts/build_creator_from_hairstyle_masters.py
-
-      - name: Require explicit production smoke dispatch after generated asset publication
-        shell: bash
-        run: |
-          set -euo pipefail
-          build=.github/workflows/build-real-creator.yml
-          grep -q 'actions: write' "$build"
-          grep -q 'Trigger public Cloudflare creator validation' "$build"
-          grep -q 'GH_TOKEN:.*github.token' "$build"
-          grep -q 'gh workflow run creator-runtime-smoke.yml --ref main' "$build"
-
-      - name: Require production smoke to prove deployed creator matches main
-        shell: bash
-        run: |
-          set -euo pipefail
-          smoke=.github/workflows/creator-runtime-smoke.yml
-          grep -q -- "- 'worker.js'" "$smoke"
-          grep -q -- "- 'wrangler.jsonc'" "$smoke"
-          grep -q -- "- '.assetsignore'" "$smoke"
-          grep -q 'CREATOR_PUBLIC_ORIGIN: https://loot-up.marin-iglesias.workers.dev' "$smoke"
-          grep -q 'Wait for validated HD creator deployment' "$smoke"
-          grep -q 'x-riselooter-creator-source: validated' "$smoke"
-          grep -q 'x-riselooter-creator-version: pre-rendered-matrix-v20' "$smoke"
-          grep -q 'creator-hd.css?v=20' "$smoke"
-          grep -q 'Verify canonical creator stylesheet is public' "$smoke"
-          grep -q '! grep -q '\''mix-blend-mode'\'' /tmp/creator-hd-public.css' "$smoke"
-          grep -q '! grep -q '\''mask-'\'' /tmp/creator-hd-public.css' "$smoke"
-          grep -q '! grep -q '\''rl-avatar-stack'\'' /tmp/creator-hd-public.css' "$smoke"
-          grep -q 'sha256sum creator-hd.css' "$smoke"
-          grep -q 'Verify all 250 public creator assets match this commit' "$smoke"
-          grep -q 'sha256sum "$path"' "$smoke"
-          grep -q 'sha256sum "$remote"' "$smoke"
-          grep -q 'test "$checked" -eq 250' "$smoke"
-          grep -q 'test "$mismatches" -eq 0' "$smoke"
-          grep -q 'Exercise all 250 creator combinations on Cloudflare' "$smoke"
-          grep -q 'Record validated production creator status' "$smoke"
-
-      - name: Validate Cloudflare transparent static-asset routing
+      - name: Validate Cloudflare static routing
         shell: bash
         run: |
           set -euo pipefail
@@ -138,19 +68,13 @@ jobs:
           grep -q '"directory": "./"' wrangler.jsonc
           grep -q '"binding": "ASSETS"' wrangler.jsonc
           grep -q '"run_worker_first": true' wrangler.jsonc
-          grep -q '"not_found_handling": "single-page-application"' wrangler.jsonc
           grep -q 'env.ASSETS.fetch(request)' worker.js
-          grep -q "x-riselooter-creator-source', 'validated'" worker.js
-          grep -q "x-riselooter-creator-version', 'pre-rendered-matrix-v20'" worker.js
-          grep -q 'creator-hd.css?v=20' worker.js
+          test -s index.html
+
+      - name: Reject legacy personalization routing regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q 'creator-safe-runtime.js' worker.js
           ! grep -q 'hardenCreatorHtml' worker.js
           ! grep -q 'CREATOR_FALLBACK_NEW' worker.js
-          test -s .assetsignore
-          grep -q '^\.git$' .assetsignore
-          grep -q '^\.github$' .assetsignore
-          grep -q '^scripts$' .assetsignore
-          grep -q '^assets/creator_sources$' .assetsignore
-          grep -q '^worker\.js$' .assetsignore
-          test -s index.html
-          test "$(find assets/creator/male -type f -name '*.webp' | wc -l)" -eq 125
-          test "$(find assets/creator/female -type f -name '*.webp' | wc -l)" -eq 125
