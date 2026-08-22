@@ -7,6 +7,7 @@ class RiseLooterHead {
     element.append('<script src="/site-polish-v3.js?v=survey-only-8" defer></script>', { html: true });
     element.append('<script src="/evolution-test-mode.js?v=survey-only-2" defer></script>', { html: true });
     element.append('<script src="/cpx-integration.js?v=cpx-35504-v1" defer></script>', { html: true });
+    element.append('<script src="/admin-dashboard.js?v=admin-v1" defer></script>', { html: true });
   }
 }
 
@@ -70,6 +71,48 @@ async function supabase(env, path, init = {}) {
   return fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers });
 }
 
+async function requireAdmin(request, env) {
+  if (!env.ADMIN_USER_ID) return { ok: false, response: json({ ok:false, error:'admin not configured' }, 503) };
+  const auth = request.headers.get('authorization') || '';
+  if (!auth.startsWith('Bearer ')) return { ok:false, response: json({ ok:false, error:'authentication required' }, 401) };
+  const token = auth.slice(7);
+  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) return { ok:false, response: json({ ok:false, error:'invalid session' }, 401) };
+  const user = await res.json();
+  if (!user?.id || user.id !== env.ADMIN_USER_ID) return { ok:false, response: json({ ok:false, error:'forbidden' }, 403) };
+  return { ok:true, user };
+}
+
+async function handleAdminSummary(request, env) {
+  const guard = await requireAdmin(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [profilesRes, txRes] = await Promise.all([
+    supabase(env, 'profiles?select=id,lootix_available'),
+    supabase(env, 'partner_reward_transactions?select=transaction_id,status,amount_usd,user_share_usd,publisher_share_usd,reward_coins,credited,reversed,created_at&order=created_at.desc&limit=500')
+  ]);
+  if (!profilesRes.ok || !txRes.ok) return json({ ok:false, error:'admin data unavailable' }, 500);
+  const profiles = await profilesRes.json();
+  const txs = await txRes.json();
+  const active = txs.filter(t => t.credited && !t.reversed);
+  const validatedGrossUsd = active.reduce((s,t)=>s+Number(t.amount_usd||0),0);
+  const publisherBalanceUsd = active.reduce((s,t)=>s+Number(t.publisher_share_usd||0),0);
+  const userShareUsd = active.reduce((s,t)=>s+Number(t.user_share_usd||0),0);
+  const userRlCoins = profiles.reduce((s,p)=>s+Number(p.lootix_available||0),0);
+  return json({
+    ok:true,
+    users_count: profiles.length,
+    validated_gross_usd: Number(validatedGrossUsd.toFixed(6)),
+    publisher_balance_usd: Number(publisherBalanceUsd.toFixed(6)),
+    user_share_usd: Number(userShareUsd.toFixed(6)),
+    user_rl_coins: userRlCoins,
+    user_balance_eur: Number((userRlCoins / 100).toFixed(2)),
+    recent_transactions: txs.slice(0,50)
+  });
+}
+
 async function handleCpxPostback(request, env) {
   if (!env.CPX_SECURITY_HASH) return json({ ok: false, error: 'CPX secret not configured' }, 503);
   const url = new URL(request.url);
@@ -118,6 +161,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/cpx/postback') return handleCpxPostback(request, env);
+    if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
     const response = await env.ASSETS.fetch(request);
     const contentType = response.headers.get('content-type') || '';
@@ -128,7 +172,7 @@ export default {
     headers.set('expires', '0');
     headers.set('x-riselooter-creator-source', 'canonical-stage-images');
     headers.set('x-riselooter-creator-version', 'base-hq-realesrgan-v2');
-    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v4-70-30');
+    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v5-admin');
     return new HTMLRewriter().on('head', new RiseLooterHead()).transform(new Response(response.body,{status:response.status,statusText:response.statusText,headers}));
   }
 };
