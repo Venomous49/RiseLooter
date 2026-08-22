@@ -89,7 +89,10 @@ async function handleCpxPostback(request, env) {
 
   const eurPerUsd = Number(env.CPX_EUR_PER_USD || 0.92);
   if (!Number.isFinite(eurPerUsd) || eurPerUsd <= 0) return json({ ok: false, error: 'invalid exchange-rate configuration' }, 503);
-  const rewardCoins = Math.max(0, Math.floor(amountUsd * eurPerUsd * 0.70 * 100));
+
+  const userShareUsd = amountUsd * 0.70;
+  const publisherShareUsd = amountUsd * 0.30;
+  const rewardCoins = Math.max(0, Math.floor(userShareUsd * eurPerUsd * 100));
   const payload = {
     p_provider: 'cpx', p_transaction_id: transId, p_user_id: userId,
     p_offer_id: offerId, p_status: status, p_amount_usd: amountUsd,
@@ -99,7 +102,16 @@ async function handleCpxPostback(request, env) {
   const res = await supabase(env, 'rpc/apply_partner_reward', { method: 'POST', body: JSON.stringify(payload) });
   const text = await res.text();
   if (!res.ok) return json({ ok: false, error: 'reward transaction failed', detail: text.slice(0, 300) }, 500);
-  return json({ ok: true, transaction: transId, status, reward_coins: rewardCoins });
+
+  return json({
+    ok: true,
+    transaction: transId,
+    status,
+    gross_amount_usd: amountUsd,
+    user_share_usd: Number(userShareUsd.toFixed(6)),
+    publisher_share_usd: Number(publisherShareUsd.toFixed(6)),
+    reward_coins: rewardCoins
+  });
 }
 
 export default {
@@ -116,7 +128,7 @@ export default {
     headers.set('expires', '0');
     headers.set('x-riselooter-creator-source', 'canonical-stage-images');
     headers.set('x-riselooter-creator-version', 'base-hq-realesrgan-v2');
-    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v3');
+    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v4-70-30');
     return new HTMLRewriter().on('head', new RiseLooterHead()).transform(new Response(response.body,{status:response.status,statusText:response.statusText,headers}));
   }
 };
