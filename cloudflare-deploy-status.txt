@@ -1,5 +1,7 @@
 status=failure
-source_commit=fbf2be2e864064f92c4806c050ffea96620c8ac0
-stage_version=all-assets-4k-v1
+source_commit=fb0bcc6eaef1ee57f07643d1c617d74c6af83af3
+stage_version=all-assets-4k-resumable-v3
 character_assets=16
+final_dimensions=3072x4096
+checkpoint_per_asset=yes
 rollback_source=disabled
