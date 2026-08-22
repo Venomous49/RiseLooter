@@ -6,6 +6,7 @@ class RiseLooterHead {
     element.append('<script src="/fixed-stage-home.js?v=base-hq-realesrgan-v2" defer></script>', { html: true });
     element.append('<script src="/site-polish-v3.js?v=survey-only-8" defer></script>', { html: true });
     element.append('<script src="/evolution-test-mode.js?v=survey-only-2" defer></script>', { html: true });
+    element.append('<script src="/cpx-integration.js?v=cpx-35504-v1" defer></script>', { html: true });
   }
 }
 
@@ -20,7 +21,7 @@ export default {
     headers.set('expires', '0');
     headers.set('x-riselooter-creator-source', 'canonical-stage-images');
     headers.set('x-riselooter-creator-version', 'base-hq-realesrgan-v2');
-    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2');
+    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v1');
     return new HTMLRewriter().on('head', new RiseLooterHead()).transform(new Response(response.body,{status:response.status,statusText:response.statusText,headers}));
   }
 };
