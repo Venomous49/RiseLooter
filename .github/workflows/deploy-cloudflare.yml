@@ -134,6 +134,13 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Install publish verification dependencies
+        if: needs.prepare.outputs.enhance == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq webp
       - name: Download all completed 4K assets
         if: needs.prepare.outputs.enhance == 'true'
         uses: actions/download-artifact@v4
@@ -193,8 +200,15 @@ jobs:
           printf 'status=%s\nsource_commit=%s\nstage_version=all-assets-4k-parallel-v5\ncharacter_assets=16\nfinal_dimensions=3072x4096\nparallel_jobs=16\nmax_parallel=8\nartifact_checkpoint=yes\nrollback_source=disabled\n' "$outcome" "$TRIGGER_SHA" > cloudflare-deploy-status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add cloudflare-deploy-status.txt cloudflare-deploy-log.txt
-          git diff --cached --quiet || (git commit -m 'Record Cloudflare deployment diagnostics [skip ci]' && git pull --rebase origin main && git push origin HEAD:main)
+          git add cloudflare-deploy-status.txt
+          if [ -f cloudflare-deploy-log.txt ]; then git add cloudflare-deploy-log.txt; fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record Cloudflare deployment diagnostics [skip ci]'
+            git stash push -u -m 'temporary publish workspace' >/dev/null || true
+            git pull --rebase origin main
+            git push origin HEAD:main
+            git stash pop >/dev/null || true
+          fi
       - name: Fail on Cloudflare deployment failure
         if: steps.deploy.outputs.outcome != 'success'
         run: exit 1
