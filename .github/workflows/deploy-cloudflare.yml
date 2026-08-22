@@ -36,10 +36,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: riselooter-cloudflare-production
-  cancel-in-progress: false
-
 jobs:
   deploy:
     if: github.event_name != 'pull_request' || github.event.pull_request.title == 'Trigger all 16 assets 4K production run'
