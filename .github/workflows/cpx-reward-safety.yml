@@ -1,0 +1,70 @@
+name: CPX reward safety checks
+
+on:
+  push:
+    paths:
+      - 'worker.js'
+      - 'cpx-integration.js'
+      - 'supabase/cpx_rewards.sql'
+      - '.github/workflows/cpx-reward-safety.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate CPX server contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "'/api/cpx/postback'" worker.js
+          grep -q 'CPX_SECURITY_HASH' worker.js
+          grep -q 'SUPABASE_SERVICE_ROLE_KEY' worker.js
+          grep -q 'SUPABASE_URL' worker.js
+          grep -q 'apply_partner_reward' worker.js
+          grep -q "\['1','2'\]" worker.js
+          grep -q 'transaction_id text not null' supabase/cpx_rewards.sql
+          grep -q 'unique(provider, transaction_id)' supabase/cpx_rewards.sql
+          grep -q 'lootix_available' supabase/cpx_rewards.sql
+          grep -q 'credited boolean not null default false' supabase/cpx_rewards.sql
+          grep -q 'reversed boolean not null default false' supabase/cpx_rewards.sql
+          grep -q 'grant execute' supabase/cpx_rewards.sql
+          grep -q 'service_role' supabase/cpx_rewards.sql
+      - name: Ensure no production secrets are committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R --line-number -E 'CPX_SECURITY_HASH\s*=|SUPABASE_SERVICE_ROLE_KEY\s*=' --exclude='cpx-reward-safety.yml' .
+          ! grep -R --line-number -E 'sb_secret_[A-Za-z0-9_-]{20,}|service_role[^[:space:]]{20,}' --exclude='cpx-reward-safety.yml' .
+      - name: Validate CPX public widget configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'CPX_APP_ID = 35504' cpx-integration.js
+          grep -q "div_id: 'fullscreen'" cpx-integration.js
+          grep -q 'ext_user_id: String(user.id)' cpx-integration.js
+
+  production-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for current Cloudflare Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://loot-up.marin-iglesias.workers.dev'
+          for i in {1..30}; do
+            code=$(curl -sS -o /tmp/cpx-invalid.json -w '%{http_code}' "${origin}/api/cpx/postback?status=1&trans_id=ci-invalid&user_id=00000000-0000-0000-0000-000000000000&amount_usd=1&hash=invalid" || true)
+            if [ "$code" = "403" ] || [ "$code" = "503" ]; then
+              cat /tmp/cpx-invalid.json || true
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'CPX endpoint did not expose expected guarded behavior'
+          exit 1
