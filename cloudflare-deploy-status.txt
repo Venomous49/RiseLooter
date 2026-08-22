@@ -1,7 +1,9 @@
-status=failure
-source_commit=fb0bcc6eaef1ee57f07643d1c617d74c6af83af3
-stage_version=all-assets-4k-resumable-v3
+status=success
+source_commit=83f2ecb5f9bf0b093686886bbc394b1237fec9b6
+stage_version=all-assets-4k-parallel-v5
 character_assets=16
 final_dimensions=3072x4096
-checkpoint_per_asset=yes
+parallel_jobs=16
+max_parallel=8
+artifact_checkpoint=yes
 rollback_source=disabled
