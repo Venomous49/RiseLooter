@@ -1,5 +1,6 @@
 name: Rebuild approved character masters
 
+# Retrigger after workflow was established on main.
 on:
   push:
     paths:
@@ -48,11 +49,8 @@ jobs:
               cw, ch = sw // 4, sh // 2
               for i, name in enumerate(names):
                   row, col = divmod(i, 4)
-                  # exact grid cell: no bleed into neighbouring character
                   crop = sheet.crop((col*cw, row*ch, (col+1)*cw, (row+1)*ch))
-                  # preserve the approved image; no generative reconstruction.
                   out = crop.resize((W, H), Image.Resampling.LANCZOS)
-                  # light edge restoration only; no face/detail invention.
                   out = out.filter(ImageFilter.UnsharpMask(radius=1.15, percent=110, threshold=3))
                   target = Path(prefix + name)
                   out.save(target, 'WEBP', quality=98, method=6, exact=True)
