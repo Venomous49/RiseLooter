@@ -6,7 +6,7 @@ class RiseLooterHead {
     element.append('<script src="/fixed-stage-home.js?v=base-hq-realesrgan-v2" defer></script>', { html: true });
     element.append('<script src="/site-polish-v3.js?v=survey-only-8" defer></script>', { html: true });
     element.append('<script src="/evolution-test-mode.js?v=survey-only-2" defer></script>', { html: true });
-    element.append('<script src="/cpx-integration.js?v=cpx-35504-v1" defer></script>', { html: true });
+    element.append('<script src="/cpx-integration.js?v=cpx-35504-v2" defer></script>', { html: true });
     element.append('<script src="/admin-dashboard.js?v=admin-v1" defer></script>', { html: true });
   }
 }
@@ -46,7 +46,7 @@ function md5Hex(input) {
     a=hh(a,b,c,d,blocks[i+13]||0,4,681279174); d=hh(d,a,b,c,blocks[i+0]||0,11,-358537222); c=hh(c,d,a,b,blocks[i+3]||0,16,-722521979); b=hh(b,c,d,a,blocks[i+6]||0,23,76029189);
     a=hh(a,b,c,d,blocks[i+9]||0,4,-640364487); d=hh(d,a,b,c,blocks[i+12]||0,11,-421815835); c=hh(c,d,a,b,blocks[i+15]||0,16,530742520); b=hh(b,c,d,a,blocks[i+2]||0,23,-995338651);
     a=ii(a,b,c,d,blocks[i+0]||0,6,-198630844); d=ii(d,a,b,c,blocks[i+7]||0,10,1126891415); c=ii(c,d,a,b,blocks[i+14]||0,15,-1416354905); b=ii(b,c,d,a,blocks[i+5]||0,21,-57434055);
-    a=ii(a,b,c,d,blocks[i+12]||0,6,1700485571); d=ii(d,a,b,c,blocks[i+3]||0,10,-1894986606); c=ii(c,d,a,b,blocks[i+10]||0,15,-1051523); b=ii(b,c,d,a,blocks[i+1]||0,21,-2054922799);
+    a=ii(a,b,c,d,blocks[i+12]||0,6,1700485571); d=ii(d,a,b,c,blocks[i+3]||0,10,-1894986606); c=ii(c,d,a,b,blocks[i+10]||0,15,-1051523); b=ii(b,c,d,blocks[i+1]||0,21,-2054922799);
     a=ii(a,b,c,d,blocks[i+8]||0,6,1873313359); d=ii(d,a,b,c,blocks[i+15]||0,10,-30611744); c=ii(c,d,a,b,blocks[i+6]||0,15,-1560198380); b=ii(b,c,d,a,blocks[i+13]||0,21,1309151649);
     a=ii(a,b,c,d,blocks[i+4]||0,6,-145523070); d=ii(d,a,b,c,blocks[i+11]||0,10,-1120210379); c=ii(c,d,a,b,blocks[i+2]||0,15,718787259); b=ii(b,c,d,a,blocks[i+9]||0,21,-343485551);
     a=add(a,oa); b=add(b,ob); c=add(c,oc); d=add(d,od);
@@ -71,18 +71,39 @@ async function supabase(env, path, init = {}) {
   return fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers });
 }
 
-async function requireAdmin(request, env) {
-  if (!env.ADMIN_USER_ID) return { ok: false, response: json({ ok:false, error:'admin not configured' }, 503) };
+async function requireUser(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return { ok:false, response:json({ ok:false, error:'authentication unavailable' },503) };
   const auth = request.headers.get('authorization') || '';
-  if (!auth.startsWith('Bearer ')) return { ok:false, response: json({ ok:false, error:'authentication required' }, 401) };
+  if (!auth.startsWith('Bearer ')) return { ok:false, response:json({ ok:false, error:'authentication required' },401) };
   const token = auth.slice(7);
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${token}` }
   });
-  if (!res.ok) return { ok:false, response: json({ ok:false, error:'invalid session' }, 401) };
+  if (!res.ok) return { ok:false, response:json({ ok:false, error:'invalid session' },401) };
   const user = await res.json();
-  if (!user?.id || user.id !== env.ADMIN_USER_ID) return { ok:false, response: json({ ok:false, error:'forbidden' }, 403) };
+  if (!user?.id) return { ok:false, response:json({ ok:false, error:'invalid session' },401) };
   return { ok:true, user };
+}
+
+async function requireAdmin(request, env) {
+  if (!env.ADMIN_USER_ID) return { ok: false, response: json({ ok:false, error:'admin not configured' }, 503) };
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard;
+  if (guard.user.id !== env.ADMIN_USER_ID) return { ok:false, response: json({ ok:false, error:'forbidden' }, 403) };
+  return guard;
+}
+
+async function handleCpxConfig(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+  const secret = env.CPX_APP_SECURE_HASH || '';
+  return json({
+    ok: true,
+    app_id: 35504,
+    ext_user_id: String(guard.user.id),
+    secure_hash: secret ? md5Hex(`${guard.user.id}-${secret}`) : '',
+    secure_hash_enabled: Boolean(secret)
+  });
 }
 
 async function handleAdminSummary(request, env) {
@@ -143,8 +164,7 @@ async function handleCpxPostback(request, env) {
   };
 
   const res = await supabase(env, 'rpc/apply_partner_reward', { method: 'POST', body: JSON.stringify(payload) });
-  const text = await res.text();
-  if (!res.ok) return json({ ok: false, error: 'reward transaction failed', detail: text.slice(0, 300) }, 500);
+  if (!res.ok) return json({ ok: false, error: 'reward transaction failed' }, 500);
 
   return json({
     ok: true,
@@ -161,6 +181,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/cpx/postback') return handleCpxPostback(request, env);
+    if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
     if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
     const response = await env.ASSETS.fetch(request);
@@ -172,7 +193,7 @@ export default {
     headers.set('expires', '0');
     headers.set('x-riselooter-creator-source', 'canonical-stage-images');
     headers.set('x-riselooter-creator-version', 'base-hq-realesrgan-v2');
-    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v5-admin');
+    headers.set('x-riselooter-runtime-hotfixes', 'survey-only-restored-v2-cpx-v6-admin');
     return new HTMLRewriter().on('head', new RiseLooterHead()).transform(new Response(response.body,{status:response.status,statusText:response.statusText,headers}));
   }
 };
