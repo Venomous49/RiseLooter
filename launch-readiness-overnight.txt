@@ -1,27 +1,33 @@
 RiseLooter overnight launch readiness
 
 COMPLETED / VERIFIED
-- Character masters: 16 canonical male/female stage assets recovered and validated at 3072x4096. master-rebuild-status.txt now reports quality_guard=passed, masters=16, dimensions=3072x4096, binary_transfer=verified.
-- Female final stage: female-50-rise-looter.webp was repaired from the approved reference cell after the 16-master recovery.
-- Character runtime: canonical male/female stage paths are wired; creator preview selects the canonical male/female beginner image; home/evolution art uses the selected profile gender.
-- Gender silhouettes: 8 male + 8 female 4K silhouette files exist under silhouettes/male and silhouettes/female. Runtime selects the matching gender path and preserves legacy fallback only if a gender-specific asset cannot load.
-- CPX postback: server-side hash validation, authenticated reward path, 70% user / 30% publisher split.
-- CPX reward ledger: unique provider+transaction ID, idempotent credit, reversal handling including reversal-before-credit, service-role-only RPC.
-- CPX survey bootstrap: authenticated /api/cpx/config endpoint; widget consumes server-issued ext_user_id + secure_hash when CPX_APP_SECURE_HASH is configured.
-- Admin dashboard: /api/admin/summary is protected by verified Supabase session + ADMIN_USER_ID.
-- Evolution test mode: visibility and access are gated through the protected admin endpoint.
-- Withdrawal UI/validation: minimum aligned to 1,000 RL Coins = 10 EUR and states processing after partner commission validation.
+- Character masters: 16 canonical male/female stage assets are present and the recorded quality guard reports quality_guard=passed, masters=16, dimensions=3072x4096 and binary_transfer=verified.
+- Female final stage: female-50-rise-looter.webp was repaired from the approved reference cell at commit 76298f650d5e3c6195a76161ee0e2fe7d353a2b9.
+- Fresh silhouettes after final female repair: commit facf390edbe560aab0d993de0ff5a717a7681c02 rebuilt all 16 gender silhouettes after the final female master repair. The workflow validates 3072x4096 canvases, white corners, black/white contrast, foreground area bounds and border-touch limits before commit.
+- Character runtime: fixed-stage-home.js selects canonical male/female assets from avatar_gender; creator beginner preview switches to the canonical male/female 01-debutant asset; home and evolution art use the selected profile gender.
+- Gender silhouettes: silhouettes/male and silhouettes/female each contain 8 stage files, and silhouette-stage-locks.js resolves locked stages from avatar_gender without changing the 8-stage structure.
+- Cloudflare: cloudflare-deploy-status.txt records status=success for source commit c64aa84fcca9a75ea4dc8b00f41196c64ae73012, after the final master and silhouette rebuilds. No rollback source is enabled.
+- CPX postback: server-side hash validation is present; reward value uses 70% user share / 30% publisher share.
+- CPX reward ledger: unique(provider, transaction_id), row locking, idempotent crediting, reversal handling including reversal-before-credit, and service-role-only RPC permissions are present in supabase/cpx_rewards.sql.
+- New-account baseline: application fallback displays 0 RL Coins / 0 XP / level 1; the pending SQL hardening sets profile defaults to 0 without resetting existing earned balances.
+- Admin controls: /api/admin/summary remains protected by verified Supabase session + ADMIN_USER_ID. The owner UI control is limited to the known owner UUID, while all admin data remains server-authorized.
+- Evolution test control: hidden from normal users and tied to the owner/admin path.
+- Withdrawal UI/validation: minimum remains aligned to 1,000 RL Coins = 10 EUR and states processing after partner commission validation.
 
-CURRENT VERIFICATION IN PROGRESS
-- The last silhouette publish commit predates the final female Rise Looter master repair. rebuild-gender-silhouettes.yml is configured to run on master changes and every 5 minutes, with a quality guard that requires the verified 16-master state. Await a newer silhouette publish/no-change validation before declaring all 16 silhouettes freshly derived from the latest masters.
-- Cloudflare deploy workflow watches all 16 master files and both gender silhouette directories and also runs every 10 minutes. The repository deployment status currently records success with 16 character assets and 3072x4096 final dimensions, but the recorded source_commit predates the latest female final-stage repair. Await a newer deployment diagnostic before declaring the latest main fully confirmed live.
+LAUNCH BLOCKERS / USER-ACTION ITEMS
+- Supabase migration application is not verified from this repository alone. The updated supabase/cpx_rewards.sql contains XP rewards/reversals and 0-default hardening, but committing SQL does not execute it automatically. Production must have this migration applied before CPX XP behavior can be declared live.
+- Admin runtime is still user-reported as not visible. The code-side session/owner fixes are deployed, so the remaining check is the live Cloudflare ADMIN_USER_ID binding/session match. This is a runtime configuration verification, not a reason to weaken the server-side admin guard.
 
 CPX SAFETY REVIEW
-- User share is calculated as 70% and publisher share as 30% on the server and in the database ledger.
-- unique(provider, transaction_id) plus row locking makes repeated callbacks idempotent.
-- status=2 reversals debit previously credited RL Coins once; reversal-before-credit is persisted as terminal so late status=1 cannot credit it.
+- User share is calculated as 70% and publisher share as 30% on the server and stored per transaction.
+- unique(provider, transaction_id) plus SELECT ... FOR UPDATE makes repeated callbacks idempotent.
+- status=2 reversals debit previously credited RL Coins and XP once; reversal-before-credit is persisted as terminal so a late status=1 cannot credit it.
 - Reward RPC execute permission is revoked from public/anon/authenticated and granted only to service_role.
-- Admin summary and evolution testing require an authenticated user whose id equals ADMIN_USER_ID.
+- Invalid CPX callback hashes are rejected before reward processing.
+- Admin summary remains server-gated; client-side owner visibility never grants data access.
 
-NO USER-ACTION BLOCKER
-- No user action is currently required. Remaining work is verification of the scheduled silhouette rebuild and the Cloudflare deployment generated after the latest female final-stage repair, then continued small launch-readiness checks.
+NEXT SAFE WORK
+- Keep launch changes scoped and reversible.
+- Re-check live admin runtime after the Cloudflare binding is confirmed.
+- Apply/verify the Supabase CPX SQL migration before end-to-end paid survey testing.
+- Do not rebuild or alter approved character masters unless a concrete asset defect is demonstrated.
