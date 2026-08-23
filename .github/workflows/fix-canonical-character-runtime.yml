@@ -1,0 +1,134 @@
+name: Fix canonical gender character runtime
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-canonical-character-runtime.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-canonical-character-runtime
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch character and silhouette paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          old='''function assetPath(profile,stage){
+  const gender = profile?.avatar_gender || "male";
+  const skin = profile?.avatar_skin || "medium";
+  const hairColor = profile?.avatar_hair_color || "brown";
+  const hairStyle = profile?.avatar_hair_style || (gender === "female" ? "female_long" : "male_textured");
+  if(stage === 0){
+    return `assets/creator/${gender}/${skin}/${hairColor}/${hairStyle}.webp?v=${CREATOR_ASSET_VERSION}`;
+  }
+  return `assets/characters/${gender}/${skin}/${hairColor}/${hairStyle}/${stages[stage].slug}.webp`;
+}
+
+
+
+
+
+function creatorAssetPath(state=avatarDraft,style=state.hairStyle){
+  return `assets/creator/${state.gender}/${state.skin}/${state.hairColor}/${style}.webp?v=${CREATOR_ASSET_VERSION}`;
+}
+
+function creatorFallbackPath(gender=avatarDraft.gender,skin=avatarDraft.skin,hairColor=avatarDraft.hairColor){
+  const style = gender === "female" ? "female_long" : "male_textured";
+  return creatorAssetPath({gender,skin,hairColor,hairStyle:style});
+}
+
+function fallbackAssetPath(stage){
+return `${stages[stage].slug}.webp`;
+}
+
+function silhouettePath(stage){
+return `sil-${stages[stage].slug}.png`;
+}'''
+
+          new='''function normalizedGender(value){
+  return value === "female" ? "female" : "male";
+}
+
+function canonicalCharacterPath(gender,stage){
+  const safeGender = normalizedGender(gender);
+  const prefix = safeGender === "female" ? "female-" : "";
+  return `${prefix}${stages[stage].slug}.webp?v=canonical-masters-20260823`;
+}
+
+function assetPath(profile,stage){
+  return canonicalCharacterPath(profile?.avatar_gender,stage);
+}
+
+function creatorAssetPath(state=avatarDraft,style=state.hairStyle){
+  return canonicalCharacterPath(state?.gender,0);
+}
+
+function creatorFallbackPath(gender=avatarDraft.gender,skin=avatarDraft.skin,hairColor=avatarDraft.hairColor){
+  return canonicalCharacterPath(gender,0);
+}
+
+function fallbackAssetPath(stage,gender="male"){
+  return canonicalCharacterPath(gender,stage);
+}
+
+function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDraft.gender)){
+  const safeGender = normalizedGender(gender);
+  return `silhouettes/${safeGender}/${stages[stage].slug}.png?v=approved-silhouettes-20260823`;
+}'''
+
+          if old not in s:
+              raise SystemExit('Expected legacy asset-path block not found; refusing broad patch')
+          s=s.replace(old,new,1)
+          s=s.replace('data-fallback="${fallbackAssetPath(i)}"','data-fallback="${fallbackAssetPath(i, profile?.avatar_gender)}"')
+          s=s.replace('src="${silhouettePath(i)}" alt=""','src="${silhouettePath(i, profile?.avatar_gender)}" alt=""')
+          s=s.replace('src="${silhouettePath(idx + 1)}" alt=""','src="${silhouettePath(idx + 1, profile?.avatar_gender)}" alt=""')
+
+          checks=[
+            'canonicalCharacterPath(profile?.avatar_gender,stage)',
+            'silhouettes/${safeGender}/${stages[stage].slug}.png',
+            'silhouettePath(i, profile?.avatar_gender)',
+            'silhouettePath(idx + 1, profile?.avatar_gender)'
+          ]
+          for c in checks:
+              if c not in s: raise SystemExit(f'Missing post-patch invariant: {c}')
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Static regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'canonicalCharacterPath(profile?.avatar_gender,stage)' index.html
+          grep -Fq 'silhouettes/${safeGender}/${stages[stage].slug}.png' index.html
+          if grep -Fq 'return `assets/characters/${gender}/${skin}/${hairColor}/${hairStyle}' index.html; then
+            echo 'Legacy runtime asset path remains active' >&2
+            exit 1
+          fi
+
+      - name: Commit runtime fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Use canonical gender masters and silhouettes at runtime'
+          git pull --rebase origin main
+          git push origin HEAD:main
