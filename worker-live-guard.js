@@ -7,7 +7,7 @@ const RESET_VERSION='launch-zero-2026-08-23-v1';
 
 function md5Hex(input){
   const s=unescape(encodeURIComponent(String(input)));
-  const add=(x,y)=>(((x&0xffff)+(y&0xffff))+((((x>>>16)+(y>>>16))&0xffff)<<16))|0;
+  const add=(x,y)=>((((x&0xffff)+(y&0xffff))+((((x>>>16)+(y>>>16))&0xffff)<<16))|0);
   const rol=(n,c)=>(n<<c)|(n>>>(32-c));
   const cmn=(q,a,b,x,sft,t)=>add(rol(add(add(a,q),add(x,t)),sft),b);
   const ff=(a,b,c,d,x,sft,t)=>cmn((b&c)|((~b)&d),a,b,x,sft,t);
@@ -124,6 +124,41 @@ async function cpxConfig(request,env){
   return json({ok:true,app_id:35504,ext_user_id:String(guard.user.id),secure_hash:secret?md5Hex(`${guard.user.id}-${secret}`):'',secure_hash_enabled:Boolean(secret)});
 }
 
+async function cpxSurveys(request,env){
+  const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
+  const secret=String(env.CPX_APP_SECURE_HASH||env.CPX_SECURITY_HASH||'');
+  const ext=String(guard.user.id);
+  const hash=secret?md5Hex(`${ext}-${secret}`):'';
+  const ip=(request.headers.get('CF-Connecting-IP')||request.headers.get('x-forwarded-for')||'').split(',')[0].trim();
+  const ua=request.headers.get('user-agent')||'';
+  const u=new URL('https://live-api.cpx-research.com/api/get-surveys.php');
+  u.searchParams.set('app_id','35504');
+  u.searchParams.set('ext_user_id',ext);
+  u.searchParams.set('subid_1','riselooter');
+  u.searchParams.set('subid_2','targeted-top10');
+  u.searchParams.set('output_method','api');
+  if(ip) u.searchParams.set('ip_user',ip);
+  if(ua) u.searchParams.set('user_agent',ua);
+  u.searchParams.set('limit','30');
+  if(hash) u.searchParams.set('secure_hash',hash);
+  const profile=guard.user.user_metadata?.survey_profile||{};
+  const m=String(profile.birth_date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m){
+    u.searchParams.set('main_info','true');
+    u.searchParams.set('birthday_year',m[1]);
+    u.searchParams.set('birthday_month',String(Number(m[2])));
+    u.searchParams.set('birthday_day',String(Number(m[3])));
+  }
+  if(profile.gender==='m'||profile.gender==='f') u.searchParams.set('gender',profile.gender);
+  if(profile.country_code) u.searchParams.set('user_country_code',String(profile.country_code).toUpperCase());
+  if(profile.zip_code) u.searchParams.set('zip_code',String(profile.zip_code));
+  try{
+    const r=await fetch(u.toString(),{headers:{accept:'application/json'},cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    return json({ok:r.ok,status:d.status||'',surveys:Array.isArray(d.surveys)?d.surveys:[]},r.ok?200:502);
+  }catch(_){return json({ok:false,surveys:[]},502)}
+}
+
 async function paypalHealth(request,env){
   const guard=await requireAdmin(request,env); if(!guard.ok) return guard.response;
   if(!env.PAYPAL_CLIENT_ID||!env.PAYPAL_CLIENT_SECRET) return json({ok:false,error:'PayPal credentials missing',environment:env.PAYPAL_ENV||'sandbox'},503);
@@ -140,6 +175,7 @@ async function paypalHealth(request,env){
 class RuntimeHead{
   element(element){
     element.append('<script src="/cpx-inline-v9.js?v=20260823-v9" defer></script>',{html:true});
+    element.append('<script src="/cpx-rewards-euro.js?v=20260823-targeted-v2" defer></script>',{html:true});
     element.append('<script src="/launch-state.js?v=launch-zero-v1" defer></script>',{html:true});
   }
 }
@@ -148,6 +184,7 @@ export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     if(url.pathname==='/api/cpx/config'&&request.method==='GET') return cpxConfig(request,env);
+    if(url.pathname==='/api/cpx/surveys'&&request.method==='GET') return cpxSurveys(request,env);
     if(url.pathname==='/api/leaderboard'&&request.method==='GET') return canonicalLeaderboard(request,env);
     if(url.pathname==='/api/admin/paypal/health'&&request.method==='GET') return paypalHealth(request,env);
 
