@@ -174,6 +174,7 @@ async function paypalHealth(request,env){
 
 class RuntimeHead{
   element(element){
+    element.append('<link rel="stylesheet" href="/visual-polish-v1.css?v=20260823-v1">',{html:true});
     element.append('<script src="/cpx-inline-v9.js?v=20260823-v9" defer></script>',{html:true});
     element.append('<script src="/cpx-rewards-euro.js?v=20260823-targeted-v2" defer></script>',{html:true});
     element.append('<script src="/launch-state.js?v=launch-zero-v1" defer></script>',{html:true});
