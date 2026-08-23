@@ -1,0 +1,5 @@
+male_source=.asset_sources/reference-male-grid.jpg
+male_bytes=7514
+female_source=.asset_sources/reference-female-grid.jpg
+female_bytes=7514
+quality_guard=blocked_reference_source
