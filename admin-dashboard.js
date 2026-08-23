@@ -5,19 +5,51 @@
   const fmtEur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const fmtInt = n => new Intl.NumberFormat('fr-FR').format(Number(n||0));
 
-  function findAccessToken() {
+  function deepAccessToken(value, depth = 0) {
+    if (depth > 8 || value == null) return null;
+    if (typeof value === 'string') {
+      if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value) && value.length > 80) return value;
+      try { return deepAccessToken(JSON.parse(value), depth + 1); } catch (_) { return null; }
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const token = deepAccessToken(item, depth + 1);
+        if (token) return token;
+      }
+      return null;
+    }
+    if (typeof value === 'object') {
+      if (typeof value.access_token === 'string' && value.access_token.length > 20) return value.access_token;
+      for (const key of ['currentSession','session','data','user','value']) {
+        if (key in value) {
+          const token = deepAccessToken(value[key], depth + 1);
+          if (token) return token;
+        }
+      }
+      for (const nested of Object.values(value)) {
+        const token = deepAccessToken(nested, depth + 1);
+        if (token) return token;
+      }
+    }
+    return null;
+  }
+
+  function scanStorage(storage) {
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i) || '';
-        if (!key.includes('auth-token')) continue;
-        const raw = localStorage.getItem(key);
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (!key) continue;
+        const raw = storage.getItem(key);
         if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        const token = parsed?.access_token || parsed?.currentSession?.access_token || parsed?.session?.access_token;
+        const token = deepAccessToken(raw);
         if (token) return token;
       }
     } catch (_) {}
     return null;
+  }
+
+  function findAccessToken() {
+    return scanStorage(localStorage) || scanStorage(sessionStorage);
   }
 
   async function adminFetch(path) {
@@ -29,7 +61,8 @@
   }
 
   function mountButton() {
-    if (document.getElementById('rlAdminButton')) return;
+    const existing = document.getElementById('rlAdminButton');
+    if (existing) return existing;
     const btn = document.createElement('button');
     btn.id = 'rlAdminButton';
     btn.type = 'button';
@@ -80,10 +113,12 @@
   }
 
   function card(label,value){return `<div style="background:#101521;border:1px solid #292f42;border-radius:16px;padding:16px"><div style="font-size:12px;color:#9da4b8;font-weight:800;text-transform:uppercase">${label}</div><div style="font-size:27px;font-weight:900;margin-top:8px">${value}</div></div>`}
-  function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+  function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', probeAdmin);
-  else probeAdmin();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(probeAdmin, 300));
+  else setTimeout(probeAdmin, 300);
   window.addEventListener('storage', () => setTimeout(probeAdmin, 100));
-  setInterval(probeAdmin, 15000);
+  window.addEventListener('focus', () => setTimeout(probeAdmin, 100));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(probeAdmin, 100); });
+  setInterval(probeAdmin, 5000);
 })();
