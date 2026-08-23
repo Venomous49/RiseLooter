@@ -47,13 +47,8 @@
     document.body.classList.remove('creator-test-active');
   }
 
-  function cleanPseudo(value){
-    return String(value||'').trim();
-  }
-  function validPseudo(value){
-    const p=cleanPseudo(value);
-    return /^[A-Za-z0-9_-]{3,20}$/.test(p);
-  }
+  function cleanPseudo(value){return String(value||'').trim();}
+  function validPseudo(value){return /^[A-Za-z0-9_-]{3,20}$/.test(cleanPseudo(value));}
 
   function installPseudoField(){
     if($('usernameInput'))return;
@@ -108,6 +103,17 @@
     },true);
   }
 
+  async function writePseudo(user,pseudo){
+    if(!user?.id||!validPseudo(pseudo))return false;
+    try{
+      await sb.auth.updateUser({data:{username:pseudo,player_name:pseudo}});
+    }catch(_){ }
+    try{
+      const result=await sb.from('profiles').update({player_name:pseudo}).eq('id',user.id);
+      return !result?.error;
+    }catch(_){return false;}
+  }
+
   async function syncPseudoToProfile(){
     if(typeof sb==='undefined'||!sb?.auth?.getSession)return;
     try{
@@ -121,6 +127,35 @@
     }catch(_){ }
   }
 
+  async function ensureLegacyPseudo(){
+    if(typeof sb==='undefined'||!sb?.auth?.getSession||$('rlPseudoOverlay'))return;
+    try{
+      const result=await sb.auth.getSession();
+      const user=result?.data?.session?.user;
+      if(!user?.id)return;
+      const existing=cleanPseudo(user?.user_metadata?.username||user?.user_metadata?.player_name);
+      if(validPseudo(existing)){await syncPseudoToProfile();return;}
+      const overlay=document.createElement('div');
+      overlay.id='rlPseudoOverlay';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483600;background:rgba(2,7,11,.96);display:grid;place-items:center;padding:20px';
+      overlay.innerHTML=`<div style="width:min(460px,96%);background:#061019;border:1px solid #294052;border-radius:14px;padding:22px;color:#fff"><h2 style="margin-top:0">Choisis ton pseudo RiseLooter</h2><p style="color:#a9b5bf">Il apparaîtra dans le classement avec ton rang, ton niveau, ton XP et ta série.</p><input id="rlLegacyPseudo" maxlength="20" placeholder="Ton pseudo" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2c3d4c;background:#050a0f;color:#fff;margin:8px 0 12px"><div style="font-size:11px;color:#9aa8b5;margin-bottom:14px">3 à 20 caractères : lettres, chiffres, _ ou -.</div><button id="rlSavePseudo" class="btn" style="width:100%">VALIDER MON PSEUDO</button></div>`;
+      document.body.appendChild(overlay);
+      const input=$('rlLegacyPseudo');
+      const save=$('rlSavePseudo');
+      save.onclick=async()=>{
+        const pseudo=cleanPseudo(input.value);
+        if(!validPseudo(pseudo)){alert('Pseudo invalide. Utilise 3 à 20 caractères : lettres, chiffres, _ ou -.');input.focus();return;}
+        save.disabled=true;
+        const ok=await writePseudo(user,pseudo);
+        save.disabled=false;
+        if(!ok){alert('Impossible d’enregistrer ce pseudo pour le moment. Réessaie.');return;}
+        overlay.remove();
+        try{ if(typeof loadLeaderboard==='function') await loadLeaderboard(); }catch(_){ }
+      };
+      setTimeout(()=>input.focus(),50);
+    }catch(_){ }
+  }
+
   function init(){
     removeProductionTestControl();
     installPseudoField();
@@ -128,13 +163,13 @@
     guardSignupClick();
     bindGender();
     const s=$('saveAvatar');if(s)s.addEventListener('click',e=>{if(!isOpen())return;e.preventDefault();e.stopImmediatePropagation();},true);
-    setTimeout(syncPseudoToProfile,500);
+    setTimeout(()=>{syncPseudoToProfile();ensureLegacyPseudo();},500);
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
   try{
     if(typeof sb!=='undefined'&&sb?.auth?.onAuthStateChange){
-      sb.auth.onAuthStateChange(()=>setTimeout(syncPseudoToProfile,250));
+      sb.auth.onAuthStateChange(()=>setTimeout(()=>{syncPseudoToProfile();ensureLegacyPseudo();},250));
     }
   }catch(_){ }
 })();
