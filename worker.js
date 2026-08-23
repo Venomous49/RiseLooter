@@ -4,6 +4,7 @@ class RiseLooterHead {
     element.append('<script src="/creator-cache-v23.js?v=27" defer></script>', { html: true });
     element.append('<script src="/safe-ui-bootstrap.js?v=base-hq-realesrgan-v2" defer></script>', { html: true });
     element.append('<script src="/fixed-stage-home.js?v=base-hq-realesrgan-v2" defer></script>', { html: true });
+    element.append('<script src="/silhouette-stage-locks.js?v=silhouette-4k-v1" defer></script>', { html: true });
     element.append('<script src="/site-polish-v3.js?v=survey-only-8" defer></script>', { html: true });
     element.append('<script src="/evolution-test-mode.js?v=survey-only-2" defer></script>', { html: true });
     element.append('<script src="/cpx-integration.js?v=cpx-35504-v2" defer></script>', { html: true });
