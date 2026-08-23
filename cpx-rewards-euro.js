@@ -5,7 +5,7 @@
   const euro = coins => (Number(coins || 0) / 100).toLocaleString('fr-FR', {
     style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2
   });
-  const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
   const validUrl = v => { try { const u = new URL(String(v || '')); return /^https?:$/.test(u.protocol) ? u.toString() : ''; } catch (_) { return ''; } };
   let tries = 0;
@@ -27,12 +27,16 @@
       style = document.createElement('style');
       style.id = 'riselooter-targeted-ui-fix';
       style.textContent = `
+        .hero-copy h1{font-size:20px!important;margin:7px 0 4px!important;line-height:1.05!important}
+        .level-badge{font-size:9px!important;padding:3px 6px!important;margin-left:5px!important}
         .next-evolution{width:160px!important;padding:8px!important}
         .next-evolution small{font-size:9px!important}
         .next-evolution h3{font-size:12px!important;margin:4px 0!important}
         .next-evolution .shadow-character{height:72px!important;margin:4px auto!important}
         .next-evolution .muted{font-size:10px!important;line-height:1.15!important}
         @media (max-width:700px){
+          .hero-copy h1{font-size:15px!important;margin:5px 0 3px!important;line-height:1!important}
+          .level-badge{font-size:7px!important;padding:2px 4px!important;margin-left:3px!important}
           .next-evolution{width:118px!important;padding:6px!important;left:10px!important;bottom:76px!important;border-radius:8px!important}
           .next-evolution small{font-size:7px!important;line-height:1.05!important}
           .next-evolution h3{font-size:9px!important;margin:2px 0!important;line-height:1.05!important}
@@ -128,9 +132,7 @@
 
       const wrap = document.getElementById('cpx-v9-wrap');
       if (wrap) wrap.style.display = 'none';
-    } catch (_) {
-      // Existing CPX SurveyWall remains available as the fallback.
-    }
+    } catch (_) {}
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',run,{once:true});
