@@ -92,6 +92,9 @@
       return;
     }
 
+    if (missions.dataset.cpxUser === String(user.id) && document.getElementById('fullscreen')) return;
+    missions.dataset.cpxUser = String(user.id);
+
     const profile = getSurveyProfile(user);
     const complete = Boolean(profile.year && profile.month && profile.day && profile.country && profile.zip);
     missions.innerHTML = `
@@ -178,7 +181,7 @@
     mountCPX();
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-nav="missions"], [data-filter="survey"]');
-      if (target) setTimeout(mountCPX, 80);
+      if (target && !document.getElementById('fullscreen')) setTimeout(mountCPX, 80);
     });
   }
 
