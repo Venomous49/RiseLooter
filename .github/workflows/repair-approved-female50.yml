@@ -1,0 +1,87 @@
+name: Repair approved female Rise Looter master
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-approved-female50.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Decode and verify approved final female source cell
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .stage-b64/female-50-approved-q40.part01 \
+            .stage-b64/female-50-approved-q40.part02 \
+            .stage-b64/female-50-approved-q40.part03 \
+            | base64 -d > /tmp/female50-approved.webp
+          actual=$(sha256sum /tmp/female50-approved.webp | awk '{print $1}')
+          expected='f64eed91b1feb544c36b8d65450e6655c151eb96d4ce0f1bacac5227af5120ef'
+          echo "decoded_sha256=$actual"
+          [ "$actual" = "$expected" ] || { echo 'Staged source hash mismatch'; exit 1; }
+
+      - name: Build canonical 4K master and verify perceptual identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow numpy
+          python - <<'PY'
+          from PIL import Image, ImageFilter
+          import numpy as np
+          src=Image.open('/tmp/female50-approved.webp').convert('RGB')
+          assert src.size == (384,512), src.size
+          x=np.array(src.resize((17,16)).convert('L'))
+          bits=(x[:,1:]>x[:,:-1]).flatten(); h=0
+          for b in bits: h=(h<<1)|int(b)
+          dh=f'{h:064x}'
+          expected='bc80d9c2f1e66763e2a3f3b0b199b1ace1b6c36d4b269b36db10f310e718e31c'
+          print('source_dhash256='+dh)
+          assert dh == expected, (dh,expected)
+          out=src.resize((3072,4096), Image.Resampling.LANCZOS)
+          out=out.filter(ImageFilter.UnsharpMask(radius=1.15, percent=110, threshold=3))
+          out.save('female-50-rise-looter.webp','WEBP',quality=98,method=6,exact=True)
+          check=Image.open('female-50-rise-looter.webp')
+          assert check.size == (3072,4096), check.size
+          assert check.format == 'WEBP', check.format
+          print('canonical_dimensions=3072x4096')
+          PY
+
+      - name: Commit repaired canonical master and clean staging files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .stage-b64/female-50-approved.part01
+          rm -f .stage-b64/female-50-approved-q40.part01 .stage-b64/female-50-approved-q40.part02 .stage-b64/female-50-approved-q40.part03
+          git add female-50-rise-looter.webp
+          git add -u .stage-b64
+          git diff --cached --stat
+          git commit -m 'Repair female Rise Looter master from approved reference cell'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Regenerate all gender-specific silhouettes from repaired masters
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-gender-silhouettes-4k.yml --ref main
+          echo 'Silhouette rebuild dispatched from repaired canonical master set.'
