@@ -37,7 +37,22 @@
   }
   function metric(s){const rawConv=s.conversion_rate??s.conversion??s.cr??0;return{payout:Math.max(0,num(s.payout)),loi:Math.max(1,num(s.loi||s.length_of_interview||s.duration||15)),conv:Math.max(0,Math.min(100,num(rawConv)))}}
   function rankSurveys(list){return list.map((s,i)=>({s,i,m:metric(s)})).sort((a,b)=>b.m.conv-a.m.conv||b.m.payout-a.m.payout||a.m.loi-b.m.loi||a.i-b.i).slice(0,10)}
-  function openSurveyCompatible(href){const url=validUrl(href);if(!url)return false;const opened=window.open(url,'_blank','noopener,noreferrer');if(!opened)window.location.assign(url);return true}
+  function openSurveyCompatible(href){
+    const url=validUrl(href); if(!url) return false;
+    try{
+      const opened=window.open('about:blank','_blank');
+      if(opened){
+        try{opened.opener=null}catch(_){}
+        opened.location.href=url;
+      }else{
+        window.location.assign(url);
+      }
+      return true;
+    }catch(_){
+      window.location.assign(url);
+      return true;
+    }
+  }
   async function run(){
     polishSurveySection(); const mount=document.getElementById('cpx-riselooter-mount-v9'); if(!mount){if(tries++<80)return setTimeout(run,250);return}
     const mountTitle=mount.querySelector('div[style*="font-weight:900"][style*="font-size:20px"]');if(mountTitle)mountTitle.style.display='none';const open=document.getElementById('cpx-v9-open');if(open)open.style.display='none';document.getElementById('cpx-survey-modal')?.remove();document.documentElement.style.overflow='';
