@@ -14,6 +14,57 @@
     document.head.appendChild(signupScript);
   }
 
+  // Exact RiseLooter display conversion: 100 RL Coins = 1.00 EUR.
+  function parseCoins(value){
+    const normalized = String(value ?? '')
+      .replace(/\u202f/g, '')
+      .replace(/\s/g, '')
+      .replace(',', '.')
+      .replace(/[^0-9.-]/g, '');
+    const amount = Number(normalized);
+    return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  }
+
+  function formatEurosFromCoins(coins){
+    return (Math.round(parseCoins(coins) * 100) / 10000).toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }) + ' €';
+  }
+
+  function syncHeaderEuroBalance(){
+    const coinsNode = byId('headerCoins');
+    if (!coinsNode) return;
+    const pill = coinsNode.closest('.coin-pill');
+    if (!pill) return;
+
+    pill.style.display = pill.style.display || 'inline-flex';
+    pill.style.flexDirection = 'column';
+    pill.style.alignItems = 'flex-start';
+    pill.style.lineHeight = '1.15';
+
+    // Keep the original RL Coins line intact, only add the exact EUR value below it.
+    let euroNode = byId('headerEuros');
+    if (!euroNode) {
+      euroNode = document.createElement('span');
+      euroNode.id = 'headerEuros';
+      euroNode.style.cssText = 'display:block;margin-top:3px;color:#c9d1d9;font-size:11px;font-weight:800;white-space:nowrap';
+      pill.appendChild(euroNode);
+    }
+    euroNode.textContent = '= ' + formatEurosFromCoins(coinsNode.textContent);
+  }
+
+  function watchHeaderBalance(){
+    const coinsNode = byId('headerCoins');
+    if (!coinsNode) {
+      setTimeout(watchHeaderBalance, 250);
+      return;
+    }
+    syncHeaderEuroBalance();
+    const observer = new MutationObserver(syncHeaderEuroBalance);
+    observer.observe(coinsNode, { childList:true, characterData:true, subtree:true });
+  }
+
   function applyZeroProgressDisplay(profile){
     if (Number(profile?.xp || 0) > 0) return;
     if (byId('levelBadge')) byId('levelBadge').textContent = 'NIVEAU 0';
@@ -37,6 +88,7 @@
       }
       baseRenderProfile(safeProfile);
       applyZeroProgressDisplay(safeProfile);
+      syncHeaderEuroBalance();
     };
   }
 
@@ -87,8 +139,11 @@
     }
   };
 
+  watchHeaderBalance();
+
   // Re-render once after the legacy bootstrap so the zero-progress state wins deterministically.
   setTimeout(() => {
     try { if (typeof refreshUser === 'function') refreshUser(false); } catch (_) {}
+    syncHeaderEuroBalance();
   }, 700);
 })();
