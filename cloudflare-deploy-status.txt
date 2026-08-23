@@ -1,9 +1,8 @@
 status=failure
-source_commit=150a897a60d95c03347d7fcc19c5e26ca9d97c60
-stage_version=all-assets-4k-parallel-v5
+source_commit=155864b99a3243e79fd665a858b6c0f535f568d5
+stage_version=all-assets-4k-resumable-v4
 character_assets=16
 final_dimensions=3072x4096
-parallel_jobs=16
-max_parallel=8
-artifact_checkpoint=yes
+checkpoint_per_asset=yes
+timeout_minutes=360
 rollback_source=disabled
