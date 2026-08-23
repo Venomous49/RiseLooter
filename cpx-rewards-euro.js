@@ -18,6 +18,8 @@
     if (subtitle) subtitle.textContent = 'Les sondages les plus adaptés à ton profil sont proposés en priorité.';
     const filters = missions.querySelector(':scope > .filters');
     if (filters) filters.style.display = 'none';
+    const legacyGrid = document.getElementById('missionGrid');
+    if (legacyGrid) legacyGrid.style.display = 'none';
 
     let style = document.getElementById('riselooter-targeted-ui-fix');
     if (!style) {
@@ -44,8 +46,6 @@
       const payoutScore = x.m.payout / maxPayout;
       const convScore = x.m.conv > 0 ? x.m.conv / maxConv : 0.5;
       const timeScore = 1 / Math.max(1, Math.sqrt(x.m.loi));
-      // CPX already personalizes the returned pool for the user; this score then
-      // favors likely completions and strong rewards without over-promoting long surveys.
       x.score = convScore * 0.50 + payoutScore * 0.38 + timeScore * 0.12;
     });
     return rows.sort((a,b)=>b.score-a.score || b.m.payout-a.m.payout || a.m.loi-b.m.loi).slice(0,10);
@@ -59,6 +59,7 @@
       return;
     }
     frame.src = href;
+    wrap.dataset.userOpenedSurvey = '1';
     wrap.style.display = 'block';
     wrap.style.marginTop = '14px';
     wrap.scrollIntoView({behavior:'smooth', block:'start'});
@@ -120,7 +121,7 @@
       const wrap = document.getElementById('cpx-v9-wrap');
       if (wrap && !wrap.dataset.userOpenedSurvey) wrap.style.display = 'none';
     } catch (_) {
-      // Leave the existing CPX SurveyWall untouched as a fallback.
+      // Existing CPX SurveyWall remains available as the fallback.
     }
   }
 
