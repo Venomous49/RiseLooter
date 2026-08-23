@@ -3,12 +3,16 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "loot-up",
   "account_id": "567d0185b1b286ef05d53aa6834a7635",
-  "main": "worker.js",
+  "main": "worker-entry.js",
   "compatibility_date": "2026-08-18",
   "keep_vars": true,
   "vars": {
     "ADMIN_USER_ID": "51731c06-5dc8-4955-895d-f22343be526d",
-    "SUPABASE_URL": "https://dvvjujkpnpzerbjxjjsy.supabase.co"
+    "SUPABASE_URL": "https://dvvjujkpnpzerbjxjjsy.supabase.co",
+    "PAYPAL_ENV": "sandbox"
+  },
+  "triggers": {
+    "crons": ["*/10 * * * *"]
   },
   "assets": {
     "directory": "./",
