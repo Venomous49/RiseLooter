@@ -76,4 +76,12 @@
   window.addEventListener('focus',()=>setTimeout(syncAdmin,100));
   window.addEventListener('storage',()=>setTimeout(syncAdmin,100));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(syncAdmin,100);});
+
+  if(!document.querySelector('script[data-username-guard]')){
+    const guard=document.createElement('script');
+    guard.src='/username-guard.js?v=unique-v1';
+    guard.defer=true;
+    guard.dataset.usernameGuard='1';
+    document.body.appendChild(guard);
+  }
 })();
