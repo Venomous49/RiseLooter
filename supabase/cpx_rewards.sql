@@ -98,6 +98,13 @@ begin
     update public.partner_reward_transactions
        set reversed=true, status=p_status, updated_at=now()
      where id=tx.id;
+
+  elsif p_status = '2' and not tx.credited and not tx.reversed then
+    -- A reversal can arrive before a credit because partner callbacks may be delayed/reordered.
+    -- Persist that terminal state so a late status=1 callback cannot credit an already reversed transaction.
+    update public.partner_reward_transactions
+       set reversed=true, status=p_status, updated_at=now()
+     where id=tx.id;
   else
     update public.partner_reward_transactions
        set status=p_status, updated_at=now()
