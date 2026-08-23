@@ -41,15 +41,11 @@
   }
 
   function rankSurveys(list){
-    const rows = list.map((s,i)=>({s,i,m:metric(s)}));
-    const maxPayout = Math.max(1, ...rows.map(x=>x.m.payout));
-    rows.forEach(x=>{
-      const payoutScore = x.m.payout / maxPayout;
-      const convScore = x.m.conv / 100;
-      const timeScore = 1 / Math.max(1, Math.sqrt(x.m.loi));
-      x.score = convScore * 0.50 + payoutScore * 0.38 + timeScore * 0.12;
-    });
-    return rows.sort((a,b)=>b.score-a.score || b.m.payout-a.m.payout || a.m.loi-b.m.loi).slice(0,10);
+    // Stable, systematic priority: highest success rate first; for equal rates,
+    // highest RL Coins payout first; then shortest survey as final tie-breaker.
+    return list.map((s,i)=>({s,i,m:metric(s)}))
+      .sort((a,b)=>b.m.conv-a.m.conv || b.m.payout-a.m.payout || a.m.loi-b.m.loi || a.i-b.i)
+      .slice(0,10);
   }
 
   function ensureSurveyModal(){
