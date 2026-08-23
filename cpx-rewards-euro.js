@@ -41,41 +41,20 @@
   }
 
   function rankSurveys(list){
-    // Stable, systematic priority: highest success rate first; for equal rates,
-    // highest RL Coins payout first; then shortest survey as final tie-breaker.
     return list.map((s,i)=>({s,i,m:metric(s)}))
       .sort((a,b)=>b.m.conv-a.m.conv || b.m.payout-a.m.payout || a.m.loi-b.m.loi || a.i-b.i)
       .slice(0,10);
   }
 
-  function ensureSurveyModal(){
-    let modal = document.getElementById('cpx-survey-modal');
-    if (modal) return modal;
-    modal = document.createElement('div');
-    modal.id = 'cpx-survey-modal';
-    modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);padding:18px;box-sizing:border-box';
-    modal.innerHTML = '<div style="width:min(1180px,100%);height:calc(100vh - 36px);margin:0 auto;background:#071018;border:1px solid #30465a;border-radius:14px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #263a4b"><strong>Sondage</strong><button type="button" id="cpx-survey-close" style="border:1px solid #42596e;background:#101923;color:#fff;border-radius:8px;padding:8px 13px;cursor:pointer;font-weight:800">Fermer</button></div><iframe id="cpx-survey-active-frame" title="Sondage" style="flex:1;width:100%;border:0;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
-    document.body.appendChild(modal);
-    const close = () => {
-      const frame = document.getElementById('cpx-survey-active-frame');
-      if (frame) frame.src = 'about:blank';
-      modal.style.display = 'none';
-      document.documentElement.style.overflow = '';
-    };
-    modal.querySelector('#cpx-survey-close').addEventListener('click', close);
-    modal.addEventListener('click', e=>{ if(e.target===modal) close(); });
-    document.addEventListener('keydown',e=>{ if(e.key==='Escape' && modal.style.display==='block') close(); });
-    return modal;
-  }
-
-  function showSurveyInsideRiseLooter(href){
+  function openSurveyCompatible(href){
     const url = validUrl(href);
     if (!url) return false;
-    const modal = ensureSurveyModal();
-    const frame = document.getElementById('cpx-survey-active-frame');
-    frame.src = url;
-    modal.style.display = 'block';
-    document.documentElement.style.overflow = 'hidden';
+
+    // CPX survey pages can refuse iframe embedding. Open them directly from the
+    // user's click, which is the same browser mode that already works via
+    // "Ouvrir en plein écran". If the browser blocks a new tab, use the current tab.
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) window.location.assign(url);
     return true;
   }
 
@@ -88,6 +67,10 @@
     if (mountTitle) mountTitle.style.display = 'none';
     const open = document.getElementById('cpx-v9-open');
     if (open) open.style.display = 'none';
+
+    // Remove any stale modal left by the previous iframe implementation.
+    document.getElementById('cpx-survey-modal')?.remove();
+    document.documentElement.style.overflow = '';
 
     let box = document.getElementById('cpx-euro-rewards');
     if (!box) {
@@ -132,7 +115,7 @@
         btn.addEventListener('click',e=>{
           e.preventDefault();
           e.stopPropagation();
-          showSurveyInsideRiseLooter(btn.getAttribute('data-cpx-survey'));
+          openSurveyCompatible(btn.getAttribute('data-cpx-survey'));
         });
       });
 
