@@ -11,6 +11,37 @@
     document.body.appendChild(lib);
   }
 
+  async function getServerConfig(user) {
+    let accessToken = '';
+    try {
+      const sessionResult = await sb.auth.getSession();
+      accessToken = sessionResult?.data?.session?.access_token || '';
+    } catch (_) {}
+
+    if (!accessToken) {
+      return { app_id: CPX_APP_ID, ext_user_id: String(user.id), secure_hash: '' };
+    }
+
+    try {
+      const response = await fetch('/api/cpx/config', {
+        headers: { authorization: `Bearer ${accessToken}` },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('CPX config unavailable');
+      const config = await response.json();
+      if (!config?.ok || String(config.ext_user_id || '') !== String(user.id)) {
+        throw new Error('CPX config user mismatch');
+      }
+      return {
+        app_id: Number(config.app_id) || CPX_APP_ID,
+        ext_user_id: String(config.ext_user_id),
+        secure_hash: String(config.secure_hash || '')
+      };
+    } catch (_) {
+      return { app_id: CPX_APP_ID, ext_user_id: String(user.id), secure_hash: '' };
+    }
+  }
+
   async function mountCPX() {
     const missions = document.getElementById('missions');
     if (!missions || typeof sb === 'undefined') return;
@@ -32,6 +63,7 @@
       <div id="cpx-status" class="muted" style="margin:0 0 12px">Chargement des sondages disponibles…</div>
       <div id="fullscreen" style="max-width:950px;margin:auto;min-height:260px"></div>`;
 
+    const serverConfig = await getServerConfig(user);
     const script1 = {
       div_id: 'fullscreen',
       theme_style: 1,
@@ -41,11 +73,11 @@
 
     window.config = {
       general_config: {
-        app_id: CPX_APP_ID,
-        ext_user_id: String(user.id),
+        app_id: serverConfig.app_id,
+        ext_user_id: serverConfig.ext_user_id,
         email: user.email || '',
         username: (user.user_metadata && (user.user_metadata.username || user.user_metadata.full_name)) || '',
-        secure_hash: '',
+        secure_hash: serverConfig.secure_hash,
         subid_1: 'riselooter',
         subid_2: ''
       },
