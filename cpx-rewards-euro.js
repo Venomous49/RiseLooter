@@ -26,7 +26,19 @@
     if (!style) {
       style = document.createElement('style');
       style.id = 'riselooter-targeted-ui-fix';
-      style.textContent = '.next-evolution{width:205px!important;padding:11px!important}.next-evolution .shadow-character{height:128px!important;margin:7px auto!important}';
+      style.textContent = `
+        .next-evolution{width:160px!important;padding:8px!important}
+        .next-evolution small{font-size:9px!important}
+        .next-evolution h3{font-size:12px!important;margin:4px 0!important}
+        .next-evolution .shadow-character{height:72px!important;margin:4px auto!important}
+        .next-evolution .muted{font-size:10px!important;line-height:1.15!important}
+        @media (max-width:700px){
+          .next-evolution{width:118px!important;padding:6px!important;left:10px!important;bottom:76px!important;border-radius:8px!important}
+          .next-evolution small{font-size:7px!important;line-height:1.05!important}
+          .next-evolution h3{font-size:9px!important;margin:2px 0!important;line-height:1.05!important}
+          .next-evolution .shadow-character{height:50px!important;margin:2px auto!important}
+          .next-evolution .muted{font-size:8px!important;line-height:1.05!important}
+        }`;
       document.head.appendChild(style);
     }
   }
@@ -49,10 +61,6 @@
   function openSurveyCompatible(href){
     const url = validUrl(href);
     if (!url) return false;
-
-    // CPX survey pages can refuse iframe embedding. Open them directly from the
-    // user's click, which is the same browser mode that already works via
-    // "Ouvrir en plein écran". If the browser blocks a new tab, use the current tab.
     const opened = window.open(url, '_blank', 'noopener,noreferrer');
     if (!opened) window.location.assign(url);
     return true;
@@ -68,7 +76,6 @@
     const open = document.getElementById('cpx-v9-open');
     if (open) open.style.display = 'none';
 
-    // Remove any stale modal left by the previous iframe implementation.
     document.getElementById('cpx-survey-modal')?.remove();
     document.documentElement.style.overflow = '';
 
