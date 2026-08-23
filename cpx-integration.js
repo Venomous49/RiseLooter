@@ -1,10 +1,10 @@
 /* RiseLooter CPX Research integration — App 35504 */
 (() => {
-  if (window.__RISELOOTER_CPX_V3__) return;
-  window.__RISELOOTER_CPX_V3__ = true;
+  if (window.__RISELOOTER_CPX_V4__) return;
+  window.__RISELOOTER_CPX_V4__ = true;
 
   const CPX_APP_ID = 35504;
-  const CPX_LIB = 'https://cdn.cpx-research.com/assets/js/script_tag_v2.0.js';
+  let mounting = false;
 
   async function getServerConfig(user) {
     let accessToken = '';
@@ -15,14 +15,14 @@
     if (!accessToken) return { app_id: CPX_APP_ID, ext_user_id: String(user.id), secure_hash: '' };
     try {
       const response = await fetch('/api/cpx/config', {
-        headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store'
+        headers: { authorization: `Bearer ${accessToken}` },
+        cache: 'no-store'
       });
       if (!response.ok) throw new Error('CPX config unavailable');
       const config = await response.json();
-      if (!config?.ok || String(config.ext_user_id || '') !== String(user.id)) throw new Error('CPX config user mismatch');
       return {
         app_id: Number(config.app_id) || CPX_APP_ID,
-        ext_user_id: String(config.ext_user_id),
+        ext_user_id: String(config.ext_user_id || user.id),
         secure_hash: String(config.secure_hash || '')
       };
     } catch (_) {
@@ -33,10 +33,10 @@
   function getSurveyProfile(user) {
     const p = user?.user_metadata?.survey_profile || {};
     const birth = /^\d{4}-\d{2}-\d{2}$/.test(String(p.birth_date || '')) ? String(p.birth_date) : '';
-    const [year='',month='',day=''] = birth.split('-');
+    const [year='', month='', day=''] = birth.split('-');
     const gender = ['m','f'].includes(String(p.gender || '')) ? String(p.gender) : '';
     const country = /^[A-Z]{2}$/.test(String(p.country_code || '').toUpperCase()) ? String(p.country_code).toUpperCase() : '';
-    const zip = String(p.zip_code || '').trim().slice(0,12);
+    const zip = String(p.zip_code || '').trim().slice(0, 12);
     return { year, month, day, gender, country, zip };
   }
 
@@ -51,6 +51,7 @@
     if (username) url.searchParams.set('username', username);
     url.searchParams.set('subid_1', 'riselooter');
     url.searchParams.set('subid_2', 'profiled');
+
     if (profile.year && profile.month && profile.day && profile.country && profile.zip) {
       url.searchParams.set('main_info', 'true');
       url.searchParams.set('birthday_day', String(Number(profile.day)));
@@ -63,126 +64,93 @@
     return url.toString();
   }
 
-  function loadLibrary() {
-    return new Promise((resolve, reject) => {
-      if (window.__CPX_SCRIPT_TAG_LOADED__) return resolve();
-      const existing = document.querySelector(`script[src="${CPX_LIB}"]`);
-      if (existing) {
-        existing.addEventListener('load', () => { window.__CPX_SCRIPT_TAG_LOADED__ = true; resolve(); }, { once:true });
-        existing.addEventListener('error', reject, { once:true });
-        return;
-      }
-      const s = document.createElement('script');
-      s.src = CPX_LIB;
-      s.async = true;
-      s.onload = () => { window.__CPX_SCRIPT_TAG_LOADED__ = true; resolve(); };
-      s.onerror = reject;
-      document.body.appendChild(s);
-    });
+  function ensureShell(missions) {
+    let mount = document.getElementById('cpx-riselooter-mount');
+    if (mount && mount.closest('#missions')) return mount;
+
+    mount = document.createElement('div');
+    mount.id = 'cpx-riselooter-mount';
+    mount.style.cssText = 'margin-top:16px;padding-top:16px;border-top:1px solid #203141;min-height:320px';
+    mount.innerHTML = `
+      <div style="font-weight:900;font-size:18px;margin-bottom:6px">Sondages CPX Research</div>
+      <div id="cpx-status" class="muted" style="margin-bottom:12px">Chargement des sondages personnalisés…</div>
+      <div id="cpx-frame-wrap" style="display:none">
+        <iframe id="cpx-riselooter-frame" title="Sondages CPX Research" style="width:100%;height:1700px;border:0;border-radius:10px;background:#08131c" referrerpolicy="strict-origin-when-cross-origin" loading="eager"></iframe>
+      </div>
+      <div id="cpx-login-note" style="display:none;padding:14px;border:1px solid #263848;border-radius:10px;background:#071019">Connecte-toi pour accéder aux sondages rémunérés CPX Research.</div>`;
+    missions.appendChild(mount);
+    return mount;
   }
 
   async function mountCPX() {
-    const missions = document.getElementById('missions');
-    if (!missions || typeof sb === 'undefined') return;
-
-    let user = null;
-    try { user = (await sb.auth.getUser())?.data?.user || null; } catch (_) {}
-    if (!user) {
-      missions.innerHTML = '<h2>▤ Sondages</h2><div class="section-subtitle">Connecte-toi pour accéder aux sondages rémunérés CPX Research.</div>';
-      return;
-    }
-
-    if (missions.dataset.cpxUser === String(user.id) && document.getElementById('fullscreen')) return;
-    missions.dataset.cpxUser = String(user.id);
-
-    const profile = getSurveyProfile(user);
-    const complete = Boolean(profile.year && profile.month && profile.day && profile.country && profile.zip);
-    missions.innerHTML = `
-      <h2>▤ Sondages</h2>
-      <div class="section-subtitle">Sondages CPX Research personnalisés selon ton profil.</div>
-      <div id="cpx-status" class="muted" style="margin:0 0 12px">Chargement des sondages CPX…</div>
-      <div id="fullscreen" style="max-width:950px;margin:auto;min-height:260px"></div>
-      <div id="cpx-fallback" style="display:none;margin-top:14px;padding:14px;border:1px solid #263848;border-radius:10px;background:#071019">
-        <div style="margin-bottom:10px">Le mur CPX ne s’est pas affiché dans la page.</div>
-        <a id="cpx-open-wall" class="btn" target="_blank" rel="noopener">Ouvrir les sondages CPX</a>
-      </div>`;
-
-    const serverConfig = await getServerConfig(user);
-    const username = user?.user_metadata?.username || user?.user_metadata?.player_name || '';
-    const wallUrl = buildWallUrl(user, serverConfig);
-    const open = document.getElementById('cpx-open-wall');
-    if (open) open.href = wallUrl;
-
-    const status = document.getElementById('cpx-status');
-    const fallback = document.getElementById('cpx-fallback');
-    let callbackFired = false;
-
-    window.config = {
-      general_config: {
-        app_id: Number(serverConfig.app_id) || CPX_APP_ID,
-        ext_user_id: String(serverConfig.ext_user_id),
-        email: user.email || '',
-        username: username || '',
-        secure_hash: serverConfig.secure_hash || '',
-        subid_1: 'riselooter',
-        subid_2: 'profiled'
-      },
-      style_config: {
-        text_color: '#ffffff',
-        survey_box: {
-          topbar_background_color: '#7130d5',
-          box_background_color: '#071019',
-          rounded_borders: true,
-          stars_filled: '#ffb52c'
-        }
-      },
-      script_config: [{ div_id:'fullscreen', theme_style:1, order_by:1, limit_surveys:12 }],
-      debug: false,
-      useIFrame: true,
-      iFramePosition: 1,
-      functions: {
-        no_surveys_available: () => {
-          callbackFired = true;
-          if (status) status.textContent = 'Aucun sondage CPX disponible pour ton profil pour le moment.';
-          if (fallback) fallback.style.display = 'block';
-        },
-        count_new_surveys: count => {
-          callbackFired = true;
-          if (status) status.textContent = Number(count) > 0 ? `${count} sondage(s) CPX disponible(s).` : 'Aucun nouveau sondage CPX disponible pour le moment.';
-        },
-        get_all_surveys: surveys => {
-          callbackFired = true;
-          if (status && Array.isArray(surveys)) status.textContent = surveys.length ? `${surveys.length} sondage(s) CPX chargé(s).` : 'Aucun sondage CPX disponible pour ton profil pour le moment.';
-        },
-        get_transaction: () => {}
-      }
-    };
-
+    if (mounting) return;
+    mounting = true;
     try {
-      await loadLibrary();
-      if (status) status.textContent = complete
-        ? 'Profil de ciblage actif. Recherche des sondages correspondant à ton profil…'
-        : 'Profil de ciblage incomplet. CPX peut demander des questions de qualification supplémentaires.';
-      setTimeout(() => {
-        const full = document.getElementById('fullscreen');
-        const hasContent = full && (full.children.length > 0 || full.innerHTML.trim().length > 20);
-        if (!callbackFired && !hasContent) {
-          if (status) status.textContent = 'Le widget CPX n’a pas répondu. Utilise le bouton ci-dessous pour ouvrir le mur de sondages.';
-          if (fallback) fallback.style.display = 'block';
-        }
-      }, 8000);
-    } catch (_) {
-      if (status) status.textContent = 'Impossible de charger le widget CPX dans la page.';
-      if (fallback) fallback.style.display = 'block';
+      const missions = document.getElementById('missions');
+      if (!missions || typeof sb === 'undefined') return;
+
+      ensureShell(missions);
+      const status = document.getElementById('cpx-status');
+      const frameWrap = document.getElementById('cpx-frame-wrap');
+      const frame = document.getElementById('cpx-riselooter-frame');
+      const loginNote = document.getElementById('cpx-login-note');
+
+      let user = null;
+      try { user = (await sb.auth.getUser())?.data?.user || null; } catch (_) {}
+      if (!user) {
+        if (status) status.textContent = 'Connexion requise.';
+        if (frameWrap) frameWrap.style.display = 'none';
+        if (loginNote) loginNote.style.display = 'block';
+        return;
+      }
+
+      if (loginNote) loginNote.style.display = 'none';
+      if (status) status.textContent = 'Recherche des sondages correspondant à ton profil…';
+
+      const serverConfig = await getServerConfig(user);
+      const wallUrl = buildWallUrl(user, serverConfig);
+      const currentUser = String(user.id);
+
+      if (frame && frame.dataset.cpxUser !== currentUser) {
+        frame.dataset.cpxUser = currentUser;
+        frame.src = wallUrl;
+      }
+      if (frameWrap) frameWrap.style.display = 'block';
+
+      const profile = getSurveyProfile(user);
+      const complete = Boolean(profile.year && profile.month && profile.day && profile.country && profile.zip);
+      if (status) {
+        status.textContent = complete
+          ? 'Profil de ciblage actif — CPX personnalise les sondages selon tes réponses.'
+          : 'Profil de ciblage incomplet — CPX peut poser des questions de qualification supplémentaires.';
+      }
+    } finally {
+      mounting = false;
     }
   }
 
+  function scheduleMount(delay = 0) {
+    setTimeout(() => mountCPX().catch(() => {}), delay);
+  }
+
   function boot() {
-    mountCPX();
+    scheduleMount(250);
+    scheduleMount(1200);
+
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-nav="missions"], [data-filter="survey"]');
-      if (target && !document.getElementById('fullscreen')) setTimeout(mountCPX, 80);
+      if (target) scheduleMount(120);
     });
+
+    try {
+      sb.auth.onAuthStateChange(() => scheduleMount(120));
+    } catch (_) {}
+
+    const observer = new MutationObserver(() => {
+      const missions = document.getElementById('missions');
+      if (missions && !document.getElementById('cpx-riselooter-mount')) scheduleMount(80);
+    });
+    observer.observe(document.documentElement, { childList:true, subtree:true });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
