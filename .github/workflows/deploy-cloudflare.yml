@@ -11,6 +11,8 @@ on:
       - 'safe-ui-bootstrap.js'
       - 'site-polish-v3.js'
       - 'evolution-test-mode.js'
+      - 'cpx-integration.js'
+      - 'admin-dashboard.js'
       - '.asset-enhance-all'
       - '01-debutant.webp'
       - '05-debrouillard.webp'
@@ -28,8 +30,12 @@ on:
       - 'female-30-elite.webp'
       - 'female-40-cyber-looter.webp'
       - 'female-50-rise-looter.webp'
+      - 'silhouettes/male/**'
+      - 'silhouettes/female/**'
       - '.github/workflows/deploy-cloudflare.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
 
 permissions:
   contents: write
@@ -179,7 +185,7 @@ jobs:
           set -euo pipefail
           curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify > /tmp/userverify.json
           node -e "const d=require('/tmp/userverify.json'); process.exit(d.success?0:1)"
-      - name: Deploy current 4K workspace to Cloudflare
+      - name: Deploy current workspace to Cloudflare
         id: deploy
         shell: bash
         run: |
@@ -197,7 +203,7 @@ jobs:
         run: |
           set -euo pipefail
           outcome='${{ steps.deploy.outputs.outcome }}'; [ -n "$outcome" ] || outcome='failure'
-          printf 'status=%s\nsource_commit=%s\nstage_version=all-assets-4k-parallel-v5\ncharacter_assets=16\nfinal_dimensions=3072x4096\nparallel_jobs=16\nmax_parallel=8\nartifact_checkpoint=yes\nrollback_source=disabled\n' "$outcome" "$TRIGGER_SHA" > cloudflare-deploy-status.txt
+          printf 'status=%s\nsource_commit=%s\nstage_version=approved-reference-overnight\ncharacter_assets=16\nfinal_dimensions=3072x4096\ngender_silhouettes=auto\nrollback_source=disabled\n' "$outcome" "$TRIGGER_SHA" > cloudflare-deploy-status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add cloudflare-deploy-status.txt
