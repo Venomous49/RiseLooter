@@ -2,6 +2,7 @@ name: Rebuild approved character masters
 
 # Retrigger after workflow was established on main.
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/rebuild-reference-masters.yml'
