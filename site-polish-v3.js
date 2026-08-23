@@ -12,6 +12,7 @@
     #challenges .bonus{display:none!important}
     #missions .filters .filter:not([data-filter="survey"]){display:none!important}
     #shop,#inventory,#dailyChest,nav [data-nav="shop"],nav [data-nav="inventory"]{display:none!important}
+    .rl-payout-note{margin:12px 0 2px;padding:10px 12px;border:1px solid #294052;border-radius:9px;background:#07111a;color:#aebbc6;font-size:12px;line-height:1.45}
   `;
   document.head.appendChild(style);
 
@@ -19,7 +20,36 @@
   function syncStageBackdrop(){const img=document.querySelector('#home .hero .scene-clean-image.stage-art-clean');const scene=img&&img.closest('.character-scene-clean');if(!img||!scene)return;const src=img.currentSrc||img.src;const backdrop=src;const value=backdrop?`url("${backdrop.replace(/"/g,'\\"')}")`:'none';if(scene.style.getPropertyValue('--stage-backdrop')!==value)scene.style.setProperty('--stage-backdrop',value)}
   function polishChallenges(){const section=document.getElementById('challenges');if(!section)return;setText(section.querySelector('.section-subtitle'),'Réponds à 5 sondages pour gagner de l’XP.');[...section.querySelectorAll('.challenge')].forEach(challenge=>{if(challenge.dataset.category!=='survey'){challenge.remove();return}challenge.dataset.category='survey';setText(challenge.querySelector('span:first-child'),'▤ Réponds à 5 sondages');const reward=challenge.querySelector('.challenge-reward');setText(reward,'+150 XP');if(reward)reward.style.color='#bd74ff';challenge.onclick=async()=>{if(typeof window.loadMissions==='function')await window.loadMissions('survey');document.getElementById('missions')?.scrollIntoView({behavior:'smooth',block:'start'})}})}
   function polishMissions(){const section=document.getElementById('missions');if(!section)return;setText(section.querySelector('.section-subtitle'),'Réponds à des sondages pour gagner de l’XP.');section.querySelectorAll('.filters .filter').forEach(button=>{const survey=button.dataset.filter==='survey';button.classList.toggle('active',survey);button.style.display=survey?'':'none';if(survey)button.onclick=()=>window.loadMissions?.('survey')});section.querySelectorAll('.mission').forEach(card=>{const isSurvey=(card.textContent||'').toLowerCase().includes('sondage');card.style.display=isSurvey?'':'none'});}
-  function apply(){syncStageBackdrop();polishChallenges();polishMissions()}
+
+  function polishWithdrawals(){
+    const modal=document.getElementById('withdrawModal');
+    const amount=document.getElementById('withdrawAmount');
+    const submit=document.getElementById('withdrawSubmit');
+    if(!modal||!amount||!submit)return;
+    amount.min='1000';
+    amount.step='1';
+    const muted=[...modal.querySelectorAll('.muted')].find(el=>(el.textContent||'').toLowerCase().includes('minimum'));
+    setText(muted,'Minimum : 1 000 RL Coins = 10 €');
+    if(!modal.querySelector('.rl-payout-note')){
+      const note=document.createElement('div');
+      note.className='rl-payout-note';
+      note.textContent='Les retraits sont traités lors du cycle mensuel, après validation des commissions partenaires. Cela évite de verser des gains qui seraient ensuite annulés par un fournisseur.';
+      muted?.insertAdjacentElement('afterend',note);
+    }
+    if(!submit.dataset.rlMinimumGuard){
+      submit.dataset.rlMinimumGuard='1';
+      submit.addEventListener('click',event=>{
+        const value=Number(amount.value||0);
+        if(!Number.isFinite(value)||value<1000){
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          alert('Le minimum de retrait est de 1 000 RL Coins (10 €).');
+        }
+      },true);
+    }
+  }
+
+  function apply(){syncStageBackdrop();polishChallenges();polishMissions();polishWithdrawals()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
   let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;apply()})}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','class']});
 })();
