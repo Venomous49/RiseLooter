@@ -1,0 +1,59 @@
+name: Assemble approved reference grids
+
+on:
+  push:
+    paths:
+      - '.asset_sources/chunks/READY'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare verifier
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Assemble and verify exact approved sources
+        shell: bash
+        env:
+          MALE_SHA256: 624dae899e555fb9f929363aa6d17de714bddabcff603d98af7866deac6613aa
+          FEMALE_SHA256: 56b791b65f539676d6af814e3d9b742439eec7cc716fb2e6f12278a062988f47
+        run: |
+          set -euo pipefail
+          test -d .asset_sources/chunks/male
+          test -d .asset_sources/chunks/female
+          cat .asset_sources/chunks/male/*.txt | tr -d '\n\r ' | base64 -d > .asset_sources/reference-male-grid.jpg
+          cat .asset_sources/chunks/female/*.txt | tr -d '\n\r ' | base64 -d > .asset_sources/reference-female-grid.jpg
+          echo "$MALE_SHA256  .asset_sources/reference-male-grid.jpg" | sha256sum -c -
+          echo "$FEMALE_SHA256  .asset_sources/reference-female-grid.jpg" | sha256sum -c -
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          for p in [Path('.asset_sources/reference-male-grid.jpg'), Path('.asset_sources/reference-female-grid.jpg')]:
+              assert p.stat().st_size >= 100000, (p, p.stat().st_size)
+              with Image.open(p) as im:
+                  assert im.size == (1536, 1024), (p, im.size)
+                  im.verify()
+          PY
+
+      - name: Commit only verified sources and remove transfer fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -rf .asset_sources/chunks
+          git add .asset_sources/reference-male-grid.jpg .asset_sources/reference-female-grid.jpg .asset_sources/chunks
+          git commit -m 'Install verified approved HD reference grids'
+          git pull --rebase origin main
+          git push origin HEAD:main
