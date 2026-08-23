@@ -1,5 +1,10 @@
-male_source=.asset_sources/reference-male-grid.jpg
-male_bytes=14998
-female_source=.asset_sources/reference-female-grid.jpg
-female_bytes=14997
-quality_guard=blocked_reference_source
+source_method=github_actions_artifact_recovery
+source_run_id=32602292460
+source_artifacts=16
+legacy_reference_male_bytes=14998
+legacy_reference_female_bytes=14997
+legacy_reference_status=unused_truncated_placeholders
+quality_guard=passed
+masters=16
+dimensions=3072x4096
+binary_transfer=verified
