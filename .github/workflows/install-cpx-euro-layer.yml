@@ -1,0 +1,63 @@
+name: Install CPX euro layer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/install-cpx-euro-layer.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch deployed worker additively
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker-live-guard.js')
+          s=p.read_text()
+          marker="async function paypalHealth(request,env){"
+          fn="""async function cpxSurveys(request,env){
+  const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
+  const secret=String(env.CPX_APP_SECURE_HASH||env.CPX_SECURITY_HASH||'');
+  const ext=String(guard.user.id);
+  const hash=secret?md5Hex(`${ext}-${secret}`):'';
+  const ip=request.headers.get('CF-Connecting-IP')||request.headers.get('x-forwarded-for')||'';
+  const ua=request.headers.get('user-agent')||'';
+  const u=new URL('https://live-api.cpx-research.com/api/get-surveys.php');
+  u.searchParams.set('app_id','35504'); u.searchParams.set('ext_user_id',ext);
+  u.searchParams.set('subid_1','riselooter'); u.searchParams.set('subid_2','euro-layer');
+  u.searchParams.set('output_method','api'); u.searchParams.set('ip_user',ip);
+  u.searchParams.set('user_agent',ua); u.searchParams.set('limit','12');
+  if(hash) u.searchParams.set('secure_hash',hash);
+  const profile=guard.user.user_metadata?.survey_profile||{};
+  const m=String(profile.birth_date||'').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+  if(m){u.searchParams.set('main_info','true');u.searchParams.set('birthday_year',m[1]);u.searchParams.set('birthday_month',String(Number(m[2])));u.searchParams.set('birthday_day',String(Number(m[3])));}
+  if(profile.gender==='m'||profile.gender==='f')u.searchParams.set('gender',profile.gender);
+  if(profile.country_code)u.searchParams.set('user_country_code',String(profile.country_code).toUpperCase());
+  if(profile.zip_code)u.searchParams.set('zip_code',String(profile.zip_code));
+  try{const r=await fetch(u.toString(),{headers:{accept:'application/json'},cache:'no-store'});const d=await r.json();return json({ok:r.ok,status:d.status||'',surveys:Array.isArray(d.surveys)?d.surveys:[]},r.ok?200:502)}catch(_){return json({ok:false,surveys:[]},502)}
+}
+
+"""
+          if 'async function cpxSurveys(' not in s:
+              s=s.replace(marker,fn+marker)
+          route="if(url.pathname==='/api/cpx/surveys'&&request.method==='GET') return cpxSurveys(request,env);"
+          anchor="if(url.pathname==='/api/cpx/config'&&request.method==='GET') return cpxConfig(request,env);"
+          if route not in s:
+              s=s.replace(anchor,anchor+'\n    '+route)
+          script='<script src="/cpx-rewards-euro.js?v=20260823-euro-v1" defer></script>'
+          anchor_script='<script src="/cpx-inline-v9.js?v=20260823-v9" defer></script>'
+          if script not in s:
+              s=s.replace("element.append('"+anchor_script+"',{html:true});", "element.append('"+anchor_script+"',{html:true});\n    element.append('"+script+"',{html:true});")
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add worker-live-guard.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Expose CPX survey rewards in euros without changing SurveyWall"
+          git push
