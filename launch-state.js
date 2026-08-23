@@ -8,7 +8,7 @@
   // Keep account creation/profile logic independent from the large legacy index.html.
   if (!document.querySelector('script[data-riselooter-signup-profile]')) {
     const signupScript = document.createElement('script');
-    signupScript.src = '/signup-profile.js?v=signup-cpx-profile-v1-20260823';
+    signupScript.src = '/signup-profile.js?v=auth-v2-20260823';
     signupScript.defer = true;
     signupScript.dataset.riselooterSignupProfile = '1';
     document.head.appendChild(signupScript);
