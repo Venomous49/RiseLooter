@@ -1,0 +1,134 @@
+name: Build gender-specific 4K silhouettes
+
+on:
+  workflow_run:
+    workflows: ["Recover completed 4K character artifacts"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  silhouettes:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify the 16 canonical 4K masters are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq webp
+          files=(01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp 20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp)
+          for f in "${files[@]}"; do
+            test -s "$f" || { echo "Missing master $f"; exit 1; }
+            dims=$(webpinfo "$f" 2>/dev/null | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print w"x"h}')
+            [ "$dims" = "3072x4096" ] || { echo "$f is $dims, waiting for true recovered 4K master"; exit 1; }
+          done
+
+      - name: Install isolated silhouette dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pillow numpy opencv-python-headless rembg onnxruntime
+
+      - name: Generate 8 male + 8 female silhouettes from the canonical 4K masters
+        shell: bash
+        run: python .github/scripts/build_gender_silhouettes_4k.py
+
+      - name: Verify exactly 16 silhouette files and 4K canvases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          files=list(Path('silhouettes/male').glob('*.png'))+list(Path('silhouettes/female').glob('*.png'))
+          assert len(files)==16, f'Expected 16 silhouettes, got {len(files)}'
+          for p in files:
+              with Image.open(p) as im:
+                  assert im.size==(3072,4096), f'{p}: {im.size}'
+                  assert im.mode=='RGBA', f'{p}: {im.mode}'
+              print(p)
+          PY
+
+      - name: Create isolated locked-card silhouette runtime
+        shell: bash
+        run: |
+          cat > silhouette-stage-locks.js <<'JS'
+          (()=>{
+            'use strict';
+            const VERSION='silhouette-4k-v1';
+            const NAMES=['01-debutant','05-debrouillard','10-chasseur','15-hustler','20-pro','30-elite','40-cyber-looter','50-rise-looter'];
+            const gender=()=>String(window.currentProfile?.avatar_gender||'male').toLowerCase()==='female'?'female':'male';
+            const silhouette=(g,i)=>`/silhouettes/${g}/${NAMES[i]}.png?v=${VERSION}`;
+            const originalStageIndex=src=>NAMES.findIndex(n=>String(src||'').includes(n));
+            function apply(root=document){
+              const g=gender();
+              root.querySelectorAll?.('.evolution-card.locked img.evolution-real, .evolution-card.locked img.stage-art-clean').forEach(img=>{
+                let idx=Number(img.dataset.rlStageIndex);
+                if(!Number.isInteger(idx)||idx<0||idx>7){idx=originalStageIndex(img.getAttribute('src')||img.currentSrc||'');}
+                if(idx<0)return;
+                img.dataset.rlStageIndex=String(idx);
+                img.dataset.rlSilhouette='1';
+                const wanted=silhouette(g,idx);
+                if(!(img.getAttribute('src')||'').includes(wanted.split('?')[0])) img.src=wanted;
+                img.style.filter='none';
+                img.style.opacity='1';
+              });
+            }
+            function restoreUnlocked(root=document){
+              root.querySelectorAll?.('.evolution-card:not(.locked) img[data-rl-silhouette="1"]').forEach(img=>{
+                const idx=Number(img.dataset.rlStageIndex);
+                if(!Number.isInteger(idx)||idx<0||idx>7)return;
+                const g=gender();
+                img.src=g==='female'?`/female-${NAMES[idx]}.webp`:`/${NAMES[idx]}.webp`;
+                delete img.dataset.rlSilhouette;
+                img.style.filter='';img.style.opacity='';
+              });
+            }
+            function sync(){restoreUnlocked();apply();}
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync,{once:true});else sync();
+            let q=false;new MutationObserver(()=>{if(q)return;q=true;requestAnimationFrame(()=>{q=false;sync();})}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','src']});
+          })();
+          JS
+
+      - name: Inject only the new silhouette runtime into the Worker head
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          line="    element.append('<script src=\"/silhouette-stage-locks.js?v=silhouette-4k-v1\" defer></script>', { html: true });\n"
+          if 'silhouette-stage-locks.js' not in s:
+              anchor="    element.append('<script src=\"/fixed-stage-home.js?v=base-hq-realesrgan-v2\" defer></script>', { html: true });\n"
+              if anchor not in s: raise SystemExit('fixed-stage-home anchor not found')
+              s=s.replace(anchor, anchor+line)
+              p.write_text(s)
+          PY
+
+      - name: Commit silhouettes only plus their isolated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add silhouettes/male silhouettes/female silhouette-stage-locks.js worker.js
+          if git diff --cached --quiet; then
+            echo 'No silhouette changes to publish.'
+            exit 0
+          fi
+          git commit -m 'Replace locked evolution silhouettes with gender-specific 4K cutouts'
+          git pull --rebase origin main
+          git push origin HEAD:main
