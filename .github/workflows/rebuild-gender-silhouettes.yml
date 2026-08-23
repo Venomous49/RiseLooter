@@ -1,0 +1,141 @@
+name: Rebuild approved gender silhouettes
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    paths:
+      - '01-debutant.webp'
+      - '05-debrouillard.webp'
+      - '10-chasseur.webp'
+      - '15-hustler.webp'
+      - '20-pro.webp'
+      - '30-elite.webp'
+      - '40-cyber-looter.webp'
+      - '50-rise-looter.webp'
+      - 'female-01-debutant.webp'
+      - 'female-05-debrouillard.webp'
+      - 'female-10-chasseur.webp'
+      - 'female-15-hustler.webp'
+      - 'female-20-pro.webp'
+      - 'female-30-elite.webp'
+      - 'female-40-cyber-looter.webp'
+      - 'female-50-rise-looter.webp'
+      - '.github/workflows/rebuild-gender-silhouettes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  silhouettes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Guard against old masters
+        id: guard
+        shell: bash
+        run: |
+          if git log -50 --format=%s | grep -Fxq 'Replace 16 character masters with approved reference crops'; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Approved master replacement commit is not present yet; silhouettes will not be rebuilt from old art.'
+          fi
+
+      - name: Install segmentation tools
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'rembg[cpu]' pillow numpy opencv-python-headless
+
+      - name: Build and validate 16 clean silhouettes
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import cv2
+          import numpy as np
+          from PIL import Image, ImageFilter
+          from rembg import remove, new_session
+
+          names = [
+              '01-debutant','05-debrouillard','10-chasseur','15-hustler',
+              '20-pro','30-elite','40-cyber-looter','50-rise-looter'
+          ]
+          session = new_session('u2net')
+          out_size = (1536, 2048)
+
+          def clean_component(mask):
+              mask = (mask > 30).astype(np.uint8) * 255
+              kernel = np.ones((3,3), np.uint8)
+              mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+              n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+              if n <= 1:
+                  raise RuntimeError('no foreground component')
+              areas = stats[1:, cv2.CC_STAT_AREA]
+              largest_label = 1 + int(np.argmax(areas))
+              largest_area = int(stats[largest_label, cv2.CC_STAT_AREA])
+              # Keep the main character and meaningful detached pieces only; discard segmentation specks.
+              keep = np.zeros_like(mask)
+              threshold = max(80, int(largest_area * 0.003))
+              for label in range(1, n):
+                  area = int(stats[label, cv2.CC_STAT_AREA])
+                  if label == largest_label or area >= threshold:
+                      keep[labels == label] = 255
+              keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, kernel, iterations=1)
+              return keep
+
+          def make(src, dst):
+              im = Image.open(src).convert('RGB')
+              if im.size != (3072, 4096):
+                  raise RuntimeError(f'{src}: wrong master dimensions {im.size}')
+              # Segment at a still-detailed working resolution to keep runtime controlled.
+              work = im.resize((768,1024), Image.Resampling.LANCZOS)
+              cut = remove(work, session=session, alpha_matting=True,
+                           alpha_matting_foreground_threshold=240,
+                           alpha_matting_background_threshold=10,
+                           alpha_matting_erode_size=5)
+              alpha = np.array(cut.getchannel('A'))
+              mask = clean_component(alpha)
+              area_ratio = float(np.count_nonzero(mask)) / mask.size
+              border_pixels = int(np.count_nonzero(mask[0,:]) + np.count_nonzero(mask[-1,:]) +
+                                  np.count_nonzero(mask[:,0]) + np.count_nonzero(mask[:,-1]))
+              if not 0.035 <= area_ratio <= 0.65:
+                  raise RuntimeError(f'{src}: suspicious foreground area {area_ratio:.3f}')
+              if border_pixels > 8:
+                  raise RuntimeError(f'{src}: foreground touches image border ({border_pixels}px)')
+
+              m = Image.fromarray(mask, mode='L').resize(out_size, Image.Resampling.LANCZOS)
+              # A tiny median pass removes stair-step pixels without swelling the outline.
+              m = m.filter(ImageFilter.MedianFilter(3))
+              white = Image.new('RGB', out_size, 'white')
+              black = Image.new('RGB', out_size, 'black')
+              result = Image.composite(black, white, m)
+              Path(dst).parent.mkdir(parents=True, exist_ok=True)
+              result.save(dst, 'PNG', optimize=True)
+              print(dst, f'area={area_ratio:.3f}', f'border={border_pixels}')
+
+          for name in names:
+              make(f'{name}.webp', f'silhouettes/male/{name}.png')
+              make(f'female-{name}.webp', f'silhouettes/female/{name}.png')
+          PY
+
+      - name: Commit silhouette assets
+        if: steps.guard.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add silhouettes/male silhouettes/female
+          if git diff --cached --quiet; then
+            echo 'No silhouette changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Rebuild 16 gender silhouettes from approved masters'
+          git pull --rebase origin main
+          git push origin HEAD:main
