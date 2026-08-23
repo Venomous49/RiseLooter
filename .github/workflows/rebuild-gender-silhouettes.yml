@@ -30,6 +30,7 @@ permissions:
 jobs:
   silhouettes:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,8 +67,9 @@ jobs:
               '01-debutant','05-debrouillard','10-chasseur','15-hustler',
               '20-pro','30-elite','40-cyber-looter','50-rise-looter'
           ]
-          session = new_session('u2net')
-          out_size = (1536, 2048)
+          # Human-specific segmentation is substantially less likely to absorb the stage background.
+          session = new_session('u2net_human_seg')
+          out_size = (3072, 4096)
 
           def clean_component(mask):
               mask = (mask > 30).astype(np.uint8) * 255
@@ -79,9 +81,9 @@ jobs:
               areas = stats[1:, cv2.CC_STAT_AREA]
               largest_label = 1 + int(np.argmax(areas))
               largest_area = int(stats[largest_label, cv2.CC_STAT_AREA])
-              # Keep the main character and meaningful detached pieces only; discard segmentation specks.
+              # Preserve meaningful detached character details, but remove isolated segmentation dust.
               keep = np.zeros_like(mask)
-              threshold = max(80, int(largest_area * 0.003))
+              threshold = max(80, int(largest_area * 0.0015))
               for label in range(1, n):
                   area = int(stats[label, cv2.CC_STAT_AREA])
                   if label == largest_label or area >= threshold:
@@ -93,12 +95,12 @@ jobs:
               im = Image.open(src).convert('RGB')
               if im.size != (3072, 4096):
                   raise RuntimeError(f'{src}: wrong master dimensions {im.size}')
-              # Segment at a still-detailed working resolution to keep runtime controlled.
-              work = im.resize((768,1024), Image.Resampling.LANCZOS)
+              # Segment at higher resolution than the previous pass to protect fingers, hair and clothing contours.
+              work = im.resize((1024,1365), Image.Resampling.LANCZOS)
               cut = remove(work, session=session, alpha_matting=True,
                            alpha_matting_foreground_threshold=240,
                            alpha_matting_background_threshold=10,
-                           alpha_matting_erode_size=5)
+                           alpha_matting_erode_size=3)
               alpha = np.array(cut.getchannel('A'))
               mask = clean_component(alpha)
               area_ratio = float(np.count_nonzero(mask)) / mask.size
@@ -110,7 +112,6 @@ jobs:
                   raise RuntimeError(f'{src}: foreground touches image border ({border_pixels}px)')
 
               m = Image.fromarray(mask, mode='L').resize(out_size, Image.Resampling.LANCZOS)
-              # A tiny median pass removes stair-step pixels without swelling the outline.
               m = m.filter(ImageFilter.MedianFilter(3))
               white = Image.new('RGB', out_size, 'white')
               black = Image.new('RGB', out_size, 'black')
@@ -122,6 +123,24 @@ jobs:
           for name in names:
               make(f'{name}.webp', f'silhouettes/male/{name}.png')
               make(f'female-{name}.webp', f'silhouettes/female/{name}.png')
+          PY
+
+      - name: Verify silhouette canvases and contrast
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          files=list(Path('silhouettes/male').glob('*.png'))+list(Path('silhouettes/female').glob('*.png'))
+          if len(files) != 16: raise SystemExit(f'Expected 16 silhouettes, got {len(files)}')
+          for p in files:
+              im=Image.open(p).convert('RGB')
+              if im.size != (3072,4096): raise SystemExit(f'{p}: wrong size {im.size}')
+              corners=[im.getpixel((0,0)),im.getpixel((3071,0)),im.getpixel((0,4095)),im.getpixel((3071,4095))]
+              if any(sum(px) < 720 for px in corners): raise SystemExit(f'{p}: non-white canvas corner')
+              extrema=im.getextrema()
+              if min(v[0] for v in extrema) > 20 or max(v[1] for v in extrema) < 235: raise SystemExit(f'{p}: insufficient black/white contrast')
+              print(p)
           PY
 
       - name: Commit silhouette assets
