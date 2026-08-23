@@ -84,17 +84,31 @@ async function createPayPalPayout(env,row){
   return {ok:true,batchId:data?.batch_header?.payout_batch_id||null,status:data?.batch_header?.batch_status||'PENDING'};
 }
 
+function derivePayPalStatus(data,fallback='PENDING'){
+  const batch=String(data?.batch_header?.batch_status||fallback||'PENDING').toUpperCase();
+  const items=Array.isArray(data?.items)?data.items:[];
+  const itemStatuses=items.map(i=>String(i?.transaction_status||'').toUpperCase()).filter(Boolean);
+  if(itemStatuses.length && itemStatuses.every(s=>s==='SUCCESS')) return {status:'SUCCESS',itemStatuses};
+  const hardFailure=['FAILED','BLOCKED','RETURNED','REFUNDED','REVERSED','DENIED','CANCELED'];
+  if(itemStatuses.some(s=>hardFailure.includes(s))) return {status:'DENIED',itemStatuses};
+  if(['SUCCESS','DENIED','CANCELED'].includes(batch)) return {status:batch,itemStatuses};
+  if(itemStatuses.some(s=>['PENDING','UNCLAIMED','ONHOLD'].includes(s))) return {status:'PENDING',itemStatuses};
+  return {status:batch,itemStatuses};
+}
+
 async function syncOne(env,row){
-  if(!row.paypal_batch_id) return;
+  if(!row.paypal_batch_id) return null;
   try{
     const token=await paypalToken(env);
-    const res=await fetch(`${paypalBase(env)}/v1/payments/payouts/${encodeURIComponent(row.paypal_batch_id)}?fields=batch_header`,{headers:{authorization:`Bearer ${token}`,'content-type':'application/json'}});
-    if(!res.ok) return;
+    const res=await fetch(`${paypalBase(env)}/v1/payments/payouts/${encodeURIComponent(row.paypal_batch_id)}?page_size=1000&total_required=true`,{headers:{authorization:`Bearer ${token}`,'content-type':'application/json'}});
+    if(!res.ok) return null;
     const data=await res.json();
-    const status=data?.batch_header?.batch_status||row.paypal_batch_status||'PENDING';
-    await recordPayPal(env,row.id,row.paypal_batch_id,status,null);
-    if(['DENIED','CANCELED'].includes(status)) await refundIfFailed(env,row.id);
-  }catch(_){ }
+    const derived=derivePayPalStatus(data,row.paypal_batch_status||'PENDING');
+    const detail=derived.itemStatuses.length?`items:${derived.itemStatuses.join(',')}`:null;
+    await recordPayPal(env,row.id,row.paypal_batch_id,derived.status,detail);
+    if(['DENIED','CANCELED'].includes(derived.status)) await refundIfFailed(env,row.id);
+    return {status:derived.status,item_statuses:derived.itemStatuses};
+  }catch(_){ return null; }
 }
 
 async function handleCreateWithdrawal(request,env){
@@ -115,13 +129,24 @@ async function handleCreateWithdrawal(request,env){
 
 async function handleMyWithdrawals(request,env){
   const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
-  const res=await sb(env,`withdrawal_payouts?user_id=eq.${encodeURIComponent(guard.user.id)}&select=id,amount_coins,amount_eur,paypal_email,status,paypal_batch_status,created_at,paid_at,refunded_at&order=created_at.desc&limit=50`);
+  const res=await sb(env,`withdrawal_payouts?user_id=eq.${encodeURIComponent(guard.user.id)}&select=id,amount_coins,amount_eur,paypal_email,status,paypal_batch_status,paypal_error,created_at,paid_at,refunded_at&order=created_at.desc&limit=50`);
   if(!res.ok) return json({ok:false,error:'withdrawals unavailable'},500);
   return json({ok:true,withdrawals:await res.json()});
 }
 
+async function syncPending(env){
+  if(!env.PAYPAL_CLIENT_ID||!env.PAYPAL_CLIENT_SECRET||!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY) return;
+  const res=await sb(env,'withdrawal_payouts?status=in.(paypal_pending,payout_processing)&paypal_batch_id=not.is.null&select=id,paypal_batch_id,paypal_batch_status&limit=100');
+  if(!res.ok) return;
+  const rows=await res.json();
+  for(const row of rows) await syncOne(env,row);
+}
+
 async function handleAdminWithdrawals(request,env){
   const guard=await requireAdmin(request,env); if(!guard.ok) return guard.response;
+  // Force a PayPal reconciliation whenever the admin opens the payout panel.
+  // This complements the scheduled cron and makes status changes visible immediately.
+  await syncPending(env);
   const res=await sb(env,'withdrawal_payouts?select=id,user_id,amount_coins,amount_eur,paypal_email,status,paypal_sender_batch_id,paypal_batch_id,paypal_batch_status,paypal_error,created_at,partner_validated_at,paid_at,refunded_at&order=created_at.desc&limit=100');
   if(!res.ok) return json({ok:false,error:'withdrawals unavailable'},500);
   return json({ok:true,paypal_ready:Boolean(env.PAYPAL_CLIENT_ID&&env.PAYPAL_CLIENT_SECRET),paypal_env:env.PAYPAL_ENV||'sandbox',withdrawals:await res.json()});
@@ -135,7 +160,10 @@ async function handleAdminPay(request,env,id){
   const row=await prep.json();
   if(!row?.id) return json({ok:false,error:'withdrawal not found'},404);
   if(row.status==='paid') return json({ok:true,already_paid:true,withdrawal:row});
-  if(row.paypal_batch_id){await syncOne(env,row);return json({ok:true,already_sent:true,batch_id:row.paypal_batch_id});}
+  if(row.paypal_batch_id){
+    const sync=await syncOne(env,row);
+    return json({ok:true,already_sent:true,batch_id:row.paypal_batch_id,paypal_status:sync?.status||row.paypal_batch_status||'PENDING'});
+  }
   if(row.status!=='payout_processing') return json({ok:false,error:`withdrawal status is ${row.status}`},409);
 
   const result=await createPayPalPayout(env,row);
@@ -149,16 +177,19 @@ async function handleAdminPay(request,env,id){
   return json({ok:true,batch_id:result.batchId,paypal_status:result.status});
 }
 
-async function syncPending(env){
-  if(!env.PAYPAL_CLIENT_ID||!env.PAYPAL_CLIENT_SECRET||!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY) return;
-  const res=await sb(env,'withdrawal_payouts?status=in.(paypal_pending,payout_processing)&paypal_batch_id=not.is.null&select=id,paypal_batch_id,paypal_batch_status&limit=100');
-  if(!res.ok) return;
+async function handleAdminSync(request,env,id){
+  const guard=await requireAdmin(request,env); if(!guard.ok) return guard.response;
+  const res=await sb(env,`withdrawal_payouts?id=eq.${encodeURIComponent(id)}&select=id,paypal_batch_id,paypal_batch_status&limit=1`);
+  if(!res.ok) return json({ok:false,error:'withdrawal unavailable'},500);
   const rows=await res.json();
-  for(const row of rows) await syncOne(env,row);
+  if(!rows[0]) return json({ok:false,error:'withdrawal not found'},404);
+  if(!rows[0].paypal_batch_id) return json({ok:false,error:'withdrawal has not been sent to PayPal'},409);
+  const sync=await syncOne(env,rows[0]);
+  return json({ok:true,paypal_status:sync?.status||rows[0].paypal_batch_status||'PENDING',item_statuses:sync?.item_statuses||[]});
 }
 
 class PayoutHead {
-  element(element){ element.append('<script src="/payout-client.js?v=paypal-payouts-v1" defer></script>',{html:true}); }
+  element(element){ element.append('<script src="/payout-client.js?v=paypal-payouts-v3" defer></script>',{html:true}); }
 }
 
 export default {
@@ -169,6 +200,8 @@ export default {
     if(url.pathname==='/api/admin/withdrawals'&&request.method==='GET') return handleAdminWithdrawals(request,env);
     const m=url.pathname.match(/^\/api\/admin\/withdrawals\/([0-9a-f-]+)\/pay$/i);
     if(m&&request.method==='POST') return handleAdminPay(request,env,m[1]);
+    const s=url.pathname.match(/^\/api\/admin\/withdrawals\/([0-9a-f-]+)\/sync$/i);
+    if(s&&request.method==='POST') return handleAdminSync(request,env,s[1]);
     const response=await baseWorker.fetch(request,env,ctx);
     const ct=response.headers.get('content-type')||'';
     if(!ct.includes('text/html')) return response;
