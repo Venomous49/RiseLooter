@@ -40,10 +40,23 @@
 
     pill.style.display = pill.style.display || 'inline-flex';
     pill.style.flexDirection = 'column';
-    pill.style.alignItems = 'flex-start';
+    pill.style.alignItems = 'center';
     pill.style.lineHeight = '1.15';
+    pill.style.whiteSpace = 'nowrap';
 
-    // Keep the original RL Coins line intact, only add the exact EUR value below it.
+    // Force the original coin icon + amount + RL Coins label onto one visual line.
+    let balanceLine = byId('headerBalanceLine');
+    if (!balanceLine) {
+      balanceLine = document.createElement('span');
+      balanceLine.id = 'headerBalanceLine';
+      balanceLine.style.cssText = 'display:inline-flex;align-items:center;gap:5px;white-space:nowrap';
+      const euroExisting = byId('headerEuros');
+      const nodes = Array.from(pill.childNodes).filter(node => node !== euroExisting);
+      nodes.forEach(node => balanceLine.appendChild(node));
+      pill.insertBefore(balanceLine, euroExisting || null);
+    }
+
+    // Keep the exact EUR value on the second line.
     let euroNode = byId('headerEuros');
     if (!euroNode) {
       euroNode = document.createElement('span');
