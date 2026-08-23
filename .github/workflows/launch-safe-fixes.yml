@@ -1,0 +1,54 @@
+name: Apply guarded launch consistency fixes
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Align withdrawal minimum and partner-validation messaging
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          replacements={
+            'id="withdrawAmount"\nmin="500"':'id="withdrawAmount"\nmin="1000"',
+            'Minimum : 500 RL Coins = 5 €':'Minimum : 1 000 RL Coins = 10 € • Retrait traité après validation des commissions partenaires.',
+            'amount < 500':'amount < 1000',
+            '"Le minimum est de 500 RL Coins."':'"Le minimum est de 1 000 RL Coins (10 €)."',
+          }
+          changed=0
+          for old,new in replacements.items():
+              if old in s:
+                  s=s.replace(old,new)
+                  changed+=1
+              elif new not in s:
+                  raise SystemExit(f'Expected withdrawal contract fragment not found: {old!r}')
+          if changed:
+              p.write_text(s)
+          print(f'Withdrawal contract replacements applied: {changed}')
+          PY
+      - name: Commit only safe launch fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'Safe launch fixes already applied.'
+            exit 0
+          fi
+          git commit -m 'Align withdrawal minimum with validated commission policy'
+          git pull --rebase origin main
+          git push origin HEAD:main
