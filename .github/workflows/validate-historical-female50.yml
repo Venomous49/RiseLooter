@@ -1,0 +1,68 @@
+name: Validate historical female 50 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-historical-female50.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Extract historical fixed female final stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 99697bde52d3f8e3fc54e662861209d1217a586a:female-50-rise-looter.webp > /tmp/female50-historical.webp
+          test -s /tmp/female50-historical.webp
+
+      - name: Compute perceptual fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow numpy
+          python - <<'PY' > female50-source-validation.txt
+          from PIL import Image
+          import numpy as np, os
+          p='/tmp/female50-historical.webp'
+          im=Image.open(p).convert('RGB')
+          print('historical_commit=99697bde52d3f8e3fc54e662861209d1217a586a')
+          print(f'bytes={os.path.getsize(p)}')
+          print(f'dimensions={im.width}x{im.height}')
+          x=np.array(im.resize((17,16)).convert('L'))
+          bits=(x[:,1:]>x[:,:-1]).flatten(); h=0
+          for b in bits: h=(h<<1)|int(b)
+          print('dhash256='+f'{h:064x}')
+          x=np.array(im.resize((16,16)).convert('L'))
+          bits=(x>x.mean()).flatten(); h=0
+          for b in bits: h=(h<<1)|int(b)
+          print('ahash256='+f'{h:064x}')
+          a=np.array(im.resize((4,4))).reshape(-1,3)
+          print('tilemeans='+','.join(map(str,a.flatten().tolist())))
+          print('approved_dhash256=bc80d9c2f1e66763e2a3f3b0b199b1ace1b6c36d4b269b36db10f310e718e31c')
+          print('approved_ahash256=06e00c703870303b783b3cfc18dcd8a73813793ff9bffd9f7dde3df833ec11c0')
+          PY
+          cat female50-source-validation.txt
+
+      - name: Persist diagnostic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add female50-source-validation.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record female final-stage source fingerprint [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
