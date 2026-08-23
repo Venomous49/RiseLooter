@@ -2,6 +2,8 @@ name: Rebuild approved character masters
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
   push:
     paths:
       - '.github/workflows/rebuild-reference-masters.yml'
@@ -50,8 +52,6 @@ jobs:
               cw, ch = sw // 4, sh // 2
               for i, name in enumerate(names):
                   row, col = divmod(i, 4)
-                  # The approved 4x2 boards contain thin separator lines. Trim only
-                  # those internal seams so no white/grey grid edge gets enlarged.
                   left = col * cw + (1 if col > 0 else 0)
                   top = row * ch + (1 if row > 0 else 0)
                   right = (col + 1) * cw - (1 if col < 3 else 0)
