@@ -1,6 +1,5 @@
 name: Rebuild approved character masters
 
-# Retrigger after workflow was established on main.
 on:
   workflow_dispatch:
   push:
@@ -25,13 +24,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pillow
 
-      - name: Crop exact approved cells and upscale conservatively
+      - name: Crop approved cells without grid seams and upscale conservatively
         run: |
           python - <<'PY'
           from PIL import Image, ImageFilter
           from pathlib import Path
 
           W, H = 3072, 4096
+          EXPECTED_SHEET = (1536, 1024)
           names = [
               '01-debutant.webp',
               '05-debrouillard.webp',
@@ -46,15 +46,21 @@ jobs:
           def build(sheet_path, prefix=''):
               sheet = Image.open(sheet_path).convert('RGB')
               sw, sh = sheet.size
-              assert sw % 4 == 0 and sh % 2 == 0, (sheet_path, sheet.size)
+              assert (sw, sh) == EXPECTED_SHEET, (sheet_path, sheet.size)
               cw, ch = sw // 4, sh // 2
               for i, name in enumerate(names):
                   row, col = divmod(i, 4)
-                  crop = sheet.crop((col*cw, row*ch, (col+1)*cw, (row+1)*ch))
+                  # The approved 4x2 boards contain thin separator lines. Trim only
+                  # those internal seams so no white/grey grid edge gets enlarged.
+                  left = col * cw + (1 if col > 0 else 0)
+                  top = row * ch + (1 if row > 0 else 0)
+                  right = (col + 1) * cw - (1 if col < 3 else 0)
+                  bottom = (row + 1) * ch - (1 if row < 1 else 0)
+                  crop = sheet.crop((left, top, right, bottom))
                   out = crop.resize((W, H), Image.Resampling.LANCZOS)
-                  out = out.filter(ImageFilter.UnsharpMask(radius=1.15, percent=110, threshold=3))
+                  out = out.filter(ImageFilter.UnsharpMask(radius=1.0, percent=80, threshold=3))
                   target = Path(prefix + name)
-                  out.save(target, 'WEBP', quality=98, method=6, exact=True)
+                  out.save(target, 'WEBP', quality=94, method=6, exact=True)
                   check = Image.open(target)
                   assert check.size == (W, H), (target, check.size)
                   assert check.format == 'WEBP', (target, check.format)
@@ -93,7 +99,5 @@ jobs:
             exit 0
           fi
           git commit -m 'Replace 16 character masters with approved reference crops'
-          # Deployment diagnostics may commit while image processing is running.
-          # Rebase the image commit onto the latest main instead of overwriting or failing.
           git pull --rebase origin main
           git push origin HEAD:main
