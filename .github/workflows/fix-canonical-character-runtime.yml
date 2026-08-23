@@ -2,6 +2,8 @@ name: Fix canonical gender character runtime
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
   push:
     paths:
       - '.github/workflows/fix-canonical-character-runtime.yml'
@@ -93,6 +95,8 @@ function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDra
 }'''
 
           if old not in s:
+              if 'function canonicalCharacterPath(gender,stage)' in s:
+                  raise SystemExit(0)
               raise SystemExit('Expected legacy asset-path block not found; refusing broad patch')
           s=s.replace(old,new,1)
           s=s.replace('data-fallback="${fallbackAssetPath(i)}"','data-fallback="${fallbackAssetPath(i, profile?.avatar_gender)}"')
