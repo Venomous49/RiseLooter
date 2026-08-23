@@ -5,6 +5,15 @@
 
   const byId = id => document.getElementById(id);
 
+  // Keep account creation/profile logic independent from the large legacy index.html.
+  if (!document.querySelector('script[data-riselooter-signup-profile]')) {
+    const signupScript = document.createElement('script');
+    signupScript.src = '/signup-profile.js?v=signup-cpx-profile-v1-20260823';
+    signupScript.defer = true;
+    signupScript.dataset.riselooterSignupProfile = '1';
+    document.head.appendChild(signupScript);
+  }
+
   function applyZeroProgressDisplay(profile){
     if (Number(profile?.xp || 0) > 0) return;
     if (byId('levelBadge')) byId('levelBadge').textContent = 'NIVEAU 0';
