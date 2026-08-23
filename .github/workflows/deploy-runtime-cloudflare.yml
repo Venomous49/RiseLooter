@@ -8,6 +8,7 @@ on:
       - 'launch-state.js'
       - 'signup-profile.js'
       - 'cpx-integration.js'
+      - 'cpx-rewards-euro.js'
       - '.github/workflows/deploy-runtime-cloudflare.yml'
   workflow_dispatch:
 
