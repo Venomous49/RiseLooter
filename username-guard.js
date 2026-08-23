@@ -4,6 +4,24 @@
   const clean = v => String(v || '').trim();
   const valid = v => /^[A-Za-z0-9_-]{3,20}$/.test(clean(v));
 
+  function patchExistingAccountSignup(){
+    if(typeof sb==='undefined'||!sb?.auth?.signUp||sb.auth.signUp.__rlExistingAccountPatched)return;
+    const original=sb.auth.signUp.bind(sb.auth);
+    const wrapped=async credentials=>{
+      const result=await original(credentials);
+      const identities=result?.data?.user?.identities;
+      if(!result?.error && Array.isArray(identities) && identities.length===0){
+        return {
+          data:{user:null,session:null},
+          error:new Error('Un compte existe déjà avec cette adresse e-mail. Utilise « Se connecter » avec ton mot de passe.')
+        };
+      }
+      return result;
+    };
+    wrapped.__rlExistingAccountPatched=true;
+    sb.auth.signUp=wrapped;
+  }
+
   async function available(username) {
     try {
       const { data, error } = await sb.rpc('username_available', { p_username: clean(username) });
@@ -108,6 +126,7 @@
   }
 
   function boot() {
+    patchExistingAccountSignup();
     installAvailabilityHint();
     protectSignup();
     protectLegacyClaim();
