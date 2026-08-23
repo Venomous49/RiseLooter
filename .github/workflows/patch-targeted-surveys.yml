@@ -1,0 +1,80 @@
+name: Patch targeted surveys layer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-targeted-surveys.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch deployed worker additively
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker-live-guard.js')
+          s=p.read_text()
+          marker='async function paypalHealth(request,env){'
+          fn=r'''async function cpxSurveys(request,env){
+  const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
+  const secret=String(env.CPX_APP_SECURE_HASH||env.CPX_SECURITY_HASH||'');
+  const ext=String(guard.user.id);
+  const hash=secret?md5Hex(`${ext}-${secret}`):'';
+  const ip=(request.headers.get('CF-Connecting-IP')||request.headers.get('x-forwarded-for')||'').split(',')[0].trim();
+  const ua=request.headers.get('user-agent')||'';
+  const u=new URL('https://live-api.cpx-research.com/api/get-surveys.php');
+  u.searchParams.set('app_id','35504');
+  u.searchParams.set('ext_user_id',ext);
+  u.searchParams.set('subid_1','riselooter');
+  u.searchParams.set('subid_2','targeted-top10');
+  u.searchParams.set('output_method','api');
+  if(ip) u.searchParams.set('ip_user',ip);
+  if(ua) u.searchParams.set('user_agent',ua);
+  u.searchParams.set('limit','30');
+  if(hash) u.searchParams.set('secure_hash',hash);
+  const profile=guard.user.user_metadata?.survey_profile||{};
+  const m=String(profile.birth_date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m){
+    u.searchParams.set('main_info','true');
+    u.searchParams.set('birthday_year',m[1]);
+    u.searchParams.set('birthday_month',String(Number(m[2])));
+    u.searchParams.set('birthday_day',String(Number(m[3])));
+  }
+  if(profile.gender==='m'||profile.gender==='f') u.searchParams.set('gender',profile.gender);
+  if(profile.country_code) u.searchParams.set('user_country_code',String(profile.country_code).toUpperCase());
+  if(profile.zip_code) u.searchParams.set('zip_code',String(profile.zip_code));
+  try{
+    const r=await fetch(u.toString(),{headers:{accept:'application/json'},cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    return json({ok:r.ok,status:d.status||'',surveys:Array.isArray(d.surveys)?d.surveys:[]},r.ok?200:502);
+  }catch(_){return json({ok:false,surveys:[]},502)}
+}
+
+'''
+          if 'async function cpxSurveys(' not in s:
+              s=s.replace(marker,fn+marker)
+          route="if(url.pathname==='/api/cpx/surveys'&&request.method==='GET') return cpxSurveys(request,env);"
+          anchor="if(url.pathname==='/api/cpx/config'&&request.method==='GET') return cpxConfig(request,env);"
+          if route not in s:
+              s=s.replace(anchor,anchor+'\n    '+route)
+          anchor_script="element.append('<script src=\"/cpx-inline-v9.js?v=20260823-v9\" defer></script>',{html:true});"
+          rewards_script="element.append('<script src=\"/cpx-rewards-euro.js?v=20260823-targeted-v2\" defer></script>',{html:true});"
+          if rewards_script not in s:
+              s=s.replace(anchor_script,anchor_script+'\n    '+rewards_script)
+          p.write_text(s)
+          PY
+      - name: Commit worker patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add worker-live-guard.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Serve personalized top 10 surveys inside RiseLooter"
+          git push
