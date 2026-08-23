@@ -56,6 +56,10 @@
     if (!btn || btn.dataset.uniqueUsernameGuard === '1') return;
     btn.dataset.uniqueUsernameGuard = '1';
     btn.addEventListener('click', async event => {
+      if (btn.dataset.uniqueUsernameGuard === 'pass') {
+        btn.dataset.uniqueUsernameGuard = '1';
+        return;
+      }
       const username = clean($('usernameInput')?.value);
       if (!valid(username)) return;
       event.preventDefault();
@@ -72,17 +76,15 @@
         $('usernameInput')?.focus();
         return;
       }
-      // Continue with the site's existing signup validation now that availability is confirmed.
       btn.dataset.uniqueUsernameGuard = 'pass';
       btn.click();
-      btn.dataset.uniqueUsernameGuard = '1';
     }, true);
   }
 
   function protectLegacyClaim() {
     document.addEventListener('click', async event => {
       const btn = event.target.closest('#rlSavePseudo');
-      if (!btn || btn.dataset.uniqueClaimPass === '1') return;
+      if (!btn) return;
       const input = $('rlLegacyPseudo');
       const username = clean(input?.value);
       if (!valid(username)) return;
