@@ -1,0 +1,96 @@
+name: Rebuild approved character masters
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rebuild-reference-masters.yml'
+      - '.asset_sources/reference-male-grid.jpg'
+      - '.asset_sources/reference-female-grid.jpg'
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare Python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Crop exact approved cells and upscale conservatively
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageFilter
+          from pathlib import Path
+
+          W, H = 3072, 4096
+          names = [
+              '01-debutant.webp',
+              '05-debrouillard.webp',
+              '10-chasseur.webp',
+              '15-hustler.webp',
+              '20-pro.webp',
+              '30-elite.webp',
+              '40-cyber-looter.webp',
+              '50-rise-looter.webp',
+          ]
+
+          def build(sheet_path, prefix=''):
+              sheet = Image.open(sheet_path).convert('RGB')
+              sw, sh = sheet.size
+              assert sw % 4 == 0 and sh % 2 == 0, (sheet_path, sheet.size)
+              cw, ch = sw // 4, sh // 2
+              for i, name in enumerate(names):
+                  row, col = divmod(i, 4)
+                  # exact grid cell: no bleed into neighbouring character
+                  crop = sheet.crop((col*cw, row*ch, (col+1)*cw, (row+1)*ch))
+                  # preserve the approved image; no generative reconstruction.
+                  out = crop.resize((W, H), Image.Resampling.LANCZOS)
+                  # light edge restoration only; no face/detail invention.
+                  out = out.filter(ImageFilter.UnsharpMask(radius=1.15, percent=110, threshold=3))
+                  target = Path(prefix + name)
+                  out.save(target, 'WEBP', quality=98, method=6, exact=True)
+                  check = Image.open(target)
+                  assert check.size == (W, H), (target, check.size)
+                  assert check.format == 'WEBP', (target, check.format)
+                  print(target, check.size)
+
+          build('.asset_sources/reference-male-grid.jpg')
+          build('.asset_sources/reference-female-grid.jpg', 'female-')
+          PY
+
+      - name: Verify all 16 masters exist
+        run: |
+          set -euo pipefail
+          files=(
+            01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp
+            20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp
+            female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp
+            female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp
+          )
+          for f in "${files[@]}"; do
+            test -s "$f"
+          done
+          echo "Validated ${#files[@]} masters at 3072x4096."
+
+      - name: Commit only the 16 canonical image files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            01-debutant.webp 05-debrouillard.webp 10-chasseur.webp 15-hustler.webp \
+            20-pro.webp 30-elite.webp 40-cyber-looter.webp 50-rise-looter.webp \
+            female-01-debutant.webp female-05-debrouillard.webp female-10-chasseur.webp female-15-hustler.webp \
+            female-20-pro.webp female-30-elite.webp female-40-cyber-looter.webp female-50-rise-looter.webp
+          if git diff --cached --quiet; then
+            echo 'No master changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Replace 16 character masters with approved reference crops'
+          git push origin HEAD:main
