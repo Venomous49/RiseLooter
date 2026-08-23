@@ -1,15 +1,15 @@
-// Launch-readiness deployment refresh 2026-08-23
+// PayPal Live production configuration 2026-08-23
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "loot-up",
   "account_id": "567d0185b1b286ef05d53aa6834a7635",
-  "main": "worker-entry.js",
+  "main": "worker-live-guard.js",
   "compatibility_date": "2026-08-18",
   "keep_vars": true,
   "vars": {
     "ADMIN_USER_ID": "51731c06-5dc8-4955-895d-f22343be526d",
     "SUPABASE_URL": "https://dvvjujkpnpzerbjxjjsy.supabase.co",
-    "PAYPAL_ENV": "sandbox"
+    "PAYPAL_ENV": "live"
   },
   "triggers": {
     "crons": ["*/10 * * * *"]
