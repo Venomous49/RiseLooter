@@ -79,6 +79,7 @@ jobs:
 
       - name: Commit only the 16 canonical image files
         run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- \
@@ -91,4 +92,7 @@ jobs:
             exit 0
           fi
           git commit -m 'Replace 16 character masters with approved reference crops'
+          # Deployment diagnostics may commit while image processing is running.
+          # Rebase the image commit onto the latest main instead of overwriting or failing.
+          git pull --rebase origin main
           git push origin HEAD:main
