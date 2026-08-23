@@ -2,6 +2,10 @@ name: Apply guarded launch consistency fixes
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/launch-safe-fixes.yml'
   schedule:
     - cron: '*/5 * * * *'
 
