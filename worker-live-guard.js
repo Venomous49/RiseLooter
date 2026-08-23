@@ -139,7 +139,7 @@ async function paypalHealth(request,env){
 
 class RuntimeHead{
   element(element){
-    element.append('<script src="/cpx-integration.js?v=cpx-35504-v5-20260823b" defer onerror="setTimeout(function(){var s=document.createElement(\'script\');s.src=\'/cpx-integration.js?v=cpx-35504-v5-fallback-20260823b\';document.head.appendChild(s)},300)"></script>',{html:true});
+    element.append('<script src="/cpx-inline-v9.js?v=20260823-v9" defer></script>',{html:true});
     element.append('<script src="/launch-state.js?v=launch-zero-v1" defer></script>',{html:true});
   }
 }
