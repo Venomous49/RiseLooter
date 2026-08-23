@@ -1,72 +1,42 @@
 (() => {
   'use strict';
 
+  // Owner UUID is not a secret. It is used only to decide whether the admin UI
+  // control may be shown. All admin data remains protected server-side by
+  // /api/admin/summary + ADMIN_USER_ID.
+  const OWNER_USER_ID = '51731c06-5dc8-4955-895d-f22343be526d';
+
   const fmtUsd = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'USD'}).format(Number(n||0));
   const fmtEur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n||0));
   const fmtInt = n => new Intl.NumberFormat('fr-FR').format(Number(n||0));
 
-  function deepAccessToken(value, depth = 0) {
-    if (depth > 8 || value == null) return null;
-    if (typeof value === 'string') {
-      if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value) && value.length > 80) return value;
-      try { return deepAccessToken(JSON.parse(value), depth + 1); } catch (_) { return null; }
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const token = deepAccessToken(item, depth + 1);
-        if (token) return token;
-      }
-      return null;
-    }
-    if (typeof value === 'object') {
-      if (typeof value.access_token === 'string' && value.access_token.length > 20) return value.access_token;
-      for (const key of ['currentSession','session','data','user','value']) {
-        if (key in value) {
-          const token = deepAccessToken(value[key], depth + 1);
-          if (token) return token;
-        }
-      }
-      for (const nested of Object.values(value)) {
-        const token = deepAccessToken(nested, depth + 1);
-        if (token) return token;
-      }
-    }
-    return null;
-  }
-
-  function scanStorage(storage) {
+  async function activeAuth() {
     try {
-      for (let i = 0; i < storage.length; i++) {
-        const key = storage.key(i);
-        if (!key) continue;
-        const raw = storage.getItem(key);
-        if (!raw) continue;
-        const token = deepAccessToken(raw);
-        if (token) return token;
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  async function findAccessToken() {
-    // Always prefer the actual active Supabase session. The previous generic
-    // storage scan could pick a stale/unrelated JWT and incorrectly hide admin UI.
-    try {
-      if (typeof sb !== 'undefined' && sb?.auth?.getSession) {
-        const result = await sb.auth.getSession();
-        const token = result?.data?.session?.access_token;
-        if (token) return token;
-      }
-    } catch (_) {}
-    return scanStorage(localStorage) || scanStorage(sessionStorage);
+      if (typeof sb === 'undefined' || !sb?.auth) return { user:null, token:'' };
+      const [userResult, sessionResult] = await Promise.all([
+        sb.auth.getUser(),
+        sb.auth.getSession()
+      ]);
+      return {
+        user: userResult?.data?.user || sessionResult?.data?.session?.user || null,
+        token: sessionResult?.data?.session?.access_token || ''
+      };
+    } catch (_) {
+      return { user:null, token:'' };
+    }
   }
 
   async function adminFetch(path) {
-    const token = await findAccessToken();
-    if (!token) throw new Error('not-authenticated');
-    const res = await fetch(path, { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
-    if (!res.ok) throw new Error(res.status === 403 ? 'not-admin' : `admin-${res.status}`);
-    return res.json();
+    const auth = await activeAuth();
+    if (!auth.token) throw Object.assign(new Error('not-authenticated'), { code:'not-authenticated', user:auth.user });
+    const res = await fetch(path, { headers: { authorization: `Bearer ${auth.token}` }, cache: 'no-store' });
+    let body = null;
+    try { body = await res.json(); } catch (_) {}
+    if (!res.ok) {
+      const code = res.status === 403 ? 'not-admin' : res.status === 503 ? 'admin-not-configured' : `admin-${res.status}`;
+      throw Object.assign(new Error(code), { code, status:res.status, body, user:auth.user });
+    }
+    return body;
   }
 
   function mountButton() {
@@ -82,30 +52,58 @@
     return btn;
   }
 
-  function syncCreatorTestButton(isAdmin) {
+  function syncCreatorTestButton(isOwner) {
     const creatorTest = document.getElementById('creatorTestButton');
     if (!creatorTest) return;
-    creatorTest.style.setProperty('display', isAdmin ? '' : 'none', 'important');
-    creatorTest.setAttribute('aria-hidden', isAdmin ? 'false' : 'true');
-    creatorTest.tabIndex = isAdmin ? 0 : -1;
+    creatorTest.style.setProperty('display', isOwner ? '' : 'none', 'important');
+    creatorTest.setAttribute('aria-hidden', isOwner ? 'false' : 'true');
+    creatorTest.tabIndex = isOwner ? 0 : -1;
   }
 
   async function probeAdmin() {
     const btn = mountButton();
+    const auth = await activeAuth();
+    const isOwner = String(auth.user?.id || '').toLowerCase() === OWNER_USER_ID;
+
+    // Visibility is deterministic for the owner account instead of depending on
+    // the summary endpoint. The endpoint still protects every byte of admin data.
+    btn.style.display = isOwner ? 'block' : 'none';
+    syncCreatorTestButton(isOwner);
+    btn.dataset.userId = auth.user?.id || '';
+
+    if (!isOwner) return;
     try {
       await adminFetch('/api/admin/summary');
-      btn.style.display = 'block';
-      syncCreatorTestButton(true);
-    } catch (_) {
-      btn.style.display = 'none';
-      syncCreatorTestButton(false);
+      btn.textContent = 'ADMINISTRATEUR';
+      btn.title = 'Accès administrateur vérifié';
+    } catch (err) {
+      btn.textContent = 'ADMINISTRATEUR ⚠';
+      btn.title = err?.code === 'admin-not-configured'
+        ? 'ADMIN_USER_ID absent côté Worker'
+        : err?.code === 'not-admin'
+          ? 'Ton compte est reconnu, mais ADMIN_USER_ID côté Worker ne correspond pas'
+          : 'Contrôle administrateur à diagnostiquer';
     }
   }
 
   async function openDashboard() {
     let data;
-    try { data = await adminFetch('/api/admin/summary'); }
-    catch (_) { alert('Accès administrateur indisponible.'); return; }
+    try {
+      data = await adminFetch('/api/admin/summary');
+    } catch (err) {
+      const auth = await activeAuth();
+      const uid = auth.user?.id || 'aucun';
+      if (err?.code === 'admin-not-configured') {
+        alert(`Ton compte est bien détecté (${uid}), mais ADMIN_USER_ID n'est pas disponible dans le Worker actuellement déployé.`);
+      } else if (err?.code === 'not-admin') {
+        alert(`Ton compte est bien détecté (${uid}), mais le ADMIN_USER_ID du Worker ne correspond pas à cet UUID.`);
+      } else if (err?.code === 'not-authenticated') {
+        alert('Ta session Supabase active n\'a pas été retrouvée. Reconnecte-toi puis réessaie.');
+      } else {
+        alert(`Accès administrateur indisponible (${err?.status || err?.code || 'erreur inconnue'}).`);
+      }
+      return;
+    }
 
     const old = document.getElementById('rlAdminOverlay');
     if (old) old.remove();
@@ -134,21 +132,16 @@
   function card(label,value){return `<div style="background:#101521;border:1px solid #292f42;border-radius:16px;padding:16px"><div style="font-size:12px;color:#9da4b8;font-weight:800;text-transform:uppercase">${label}</div><div style="font-size:27px;font-weight:900;margin-top:8px">${value}</div></div>`}
   function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
 
-  // Hide the creator test control immediately until the server verifies admin access.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      syncCreatorTestButton(false);
-      setTimeout(probeAdmin, 300);
-    });
-  } else {
+  const boot = () => {
     syncCreatorTestButton(false);
-    setTimeout(probeAdmin, 300);
-  }
+    setTimeout(probeAdmin, 150);
+    setTimeout(probeAdmin, 800);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true});
+  else boot();
 
   try {
-    if (typeof sb !== 'undefined' && sb?.auth?.onAuthStateChange) {
-      sb.auth.onAuthStateChange(() => setTimeout(probeAdmin, 50));
-    }
+    if (typeof sb !== 'undefined' && sb?.auth?.onAuthStateChange) sb.auth.onAuthStateChange(() => setTimeout(probeAdmin, 50));
   } catch (_) {}
   window.addEventListener('storage', () => setTimeout(probeAdmin, 100));
   window.addEventListener('focus', () => setTimeout(probeAdmin, 100));
