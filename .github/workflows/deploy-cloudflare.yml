@@ -1,5 +1,6 @@
 name: Deploy RiseLooter to Cloudflare
 
+# Final verified silhouette deployment trigger 2026-08-23
 on:
   push:
     branches: [main]
