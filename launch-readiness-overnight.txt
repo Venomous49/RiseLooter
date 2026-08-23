@@ -1,0 +1,26 @@
+RiseLooter overnight launch readiness
+
+COMPLETED / VERIFIED
+- CPX postback: server-side hash validation, authenticated reward path, 70% user / 30% publisher split.
+- CPX reward ledger: unique provider+transaction ID, idempotent credit, reversal handling including reversal-before-credit, service-role-only RPC.
+- CPX survey bootstrap: authenticated /api/cpx/config endpoint added; widget now consumes server-issued ext_user_id + secure_hash when CPX_APP_SECURE_HASH is configured, with safe fallback to authenticated user ID.
+- Admin dashboard: /api/admin/summary is protected by verified Supabase session + ADMIN_USER_ID.
+- Evolution test mode: visibility and access are gated through the protected admin endpoint.
+- Withdrawal UI/validation: minimum aligned to 1,000 RL Coins = 10 EUR and states processing after partner commission validation.
+- Character runtime: canonical male/female stage paths and gender-specific future silhouette paths are wired; creator preview selects the canonical male/female beginner image.
+- Silhouette workflow: guarded against old masters and upgraded to higher-resolution human-specific segmentation, 3072x4096 black-on-white output, border/area/contrast validation.
+
+CURRENT IMAGE BLOCKER
+- master-rebuild-status.txt reports both repository reference sources at only 7,514 bytes.
+- quality_guard=blocked_reference_source.
+- The approved-master workflow intentionally refuses to overwrite the current 16 canonical masters from those low-quality placeholder source files.
+- The gender silhouette workflow intentionally refuses to regenerate silhouettes until commit message exactly "Replace 16 character masters with approved reference crops" exists.
+- Therefore no old-master silhouette regeneration has been allowed.
+
+NEXT IMAGE MILESTONE
+- Replace .asset_sources/reference-male-grid.* and .asset_sources/reference-female-grid.* with the actual approved full-quality 1536x1024 reference grids.
+- The guarded workflow then crops the 4x2 grids, writes 16 canonical 3072x4096 masters, and the silhouette workflow can create 16 gender-specific clean silhouettes.
+
+DEPLOYMENT
+- Last confirmed Cloudflare diagnostic before this status file: success; source_commit=bd9c21155f24bb6e45ab07ce188a85dedde8f75f.
+- Later CPX/withdrawal commits are on main and await the next successful deployment diagnostic update.
