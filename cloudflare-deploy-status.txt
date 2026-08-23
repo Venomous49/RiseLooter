@@ -1,9 +1,7 @@
 status=success
-source_commit=3df4d0595c40caf565fd2f8ddfef0ac7bb7e1fd9
-stage_version=all-assets-4k-parallel-v5
+source_commit=4688d35c343f2cc81d0f0a415fe92eb40446934d
+stage_version=approved-reference-overnight
 character_assets=16
 final_dimensions=3072x4096
-parallel_jobs=16
-max_parallel=8
-artifact_checkpoint=yes
+gender_silhouettes=auto
 rollback_source=disabled
