@@ -32,6 +32,7 @@ jobs:
 
       - name: Select and validate full-quality approved reference grids
         id: refs
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -44,14 +45,25 @@ jobs:
           female_bytes=$(stat -c%s "$female")
           echo "male=$male" >> "$GITHUB_OUTPUT"
           echo "female=$female" >> "$GITHUB_OUTPUT"
-          echo "male_bytes=$male_bytes" >> "$GITHUB_OUTPUT"
-          echo "female_bytes=$female_bytes" >> "$GITHUB_OUTPUT"
           printf 'male_source=%s\nmale_bytes=%s\nfemale_source=%s\nfemale_bytes=%s\n' "$male" "$male_bytes" "$female" "$female_bytes" > master-rebuild-status.txt
-          # A 1536x1024 detailed reference grid cannot plausibly retain approved visual fidelity at only a few KB.
-          # Never upscale/publish a thumbnail or placeholder over the canonical masters.
           if [ "$male_bytes" -lt 100000 ] || [ "$female_bytes" -lt 100000 ]; then
             echo 'quality_guard=blocked_reference_source' >> master-rebuild-status.txt
             exit 42
+          fi
+          echo 'quality_guard=source_passed' >> master-rebuild-status.txt
+
+      - name: Record blocked reference diagnostics
+        if: steps.refs.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add master-rebuild-status.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record blocked approved master rebuild [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
 
       - name: Crop approved cells without grid seams and upscale conservatively
@@ -64,34 +76,22 @@ jobs:
           import os
           from PIL import Image, ImageFilter
           from pathlib import Path
-
-          W, H = 3072, 4096
-          EXPECTED_SHEET = (1536, 1024)
-          names = [
-              '01-debutant.webp','05-debrouillard.webp','10-chasseur.webp','15-hustler.webp',
-              '20-pro.webp','30-elite.webp','40-cyber-looter.webp','50-rise-looter.webp',
-          ]
-          def build(sheet_path, prefix=''):
-              sheet = Image.open(sheet_path).convert('RGB')
-              sw, sh = sheet.size
-              assert (sw, sh) == EXPECTED_SHEET, (sheet_path, sheet.size)
-              cw, ch = sw // 4, sh // 2
-              for i, name in enumerate(names):
-                  row, col = divmod(i, 4)
-                  left = col*cw + (1 if col > 0 else 0)
-                  top = row*ch + (1 if row > 0 else 0)
-                  right = (col+1)*cw - (1 if col < 3 else 0)
-                  bottom = (row+1)*ch - (1 if row < 1 else 0)
-                  crop = sheet.crop((left, top, right, bottom))
-                  out = crop.resize((W,H), Image.Resampling.LANCZOS)
-                  out = out.filter(ImageFilter.UnsharpMask(radius=1.0, percent=80, threshold=3))
-                  target = Path(prefix + name)
-                  out.save(target,'WEBP',quality=94,method=6,exact=True)
-                  check=Image.open(target)
-                  assert check.size==(W,H) and check.format=='WEBP'
-                  print(target, check.size)
-          build(os.environ['MALE_SOURCE'])
-          build(os.environ['FEMALE_SOURCE'],'female-')
+          W,H=3072,4096
+          EXPECTED_SHEET=(1536,1024)
+          names=['01-debutant.webp','05-debrouillard.webp','10-chasseur.webp','15-hustler.webp','20-pro.webp','30-elite.webp','40-cyber-looter.webp','50-rise-looter.webp']
+          def build(sheet_path,prefix=''):
+              sheet=Image.open(sheet_path).convert('RGB'); sw,sh=sheet.size
+              assert (sw,sh)==EXPECTED_SHEET,(sheet_path,sheet.size)
+              cw,ch=sw//4,sh//2
+              for i,name in enumerate(names):
+                  row,col=divmod(i,4)
+                  left=col*cw+(1 if col>0 else 0); top=row*ch+(1 if row>0 else 0)
+                  right=(col+1)*cw-(1 if col<3 else 0); bottom=(row+1)*ch-(1 if row<1 else 0)
+                  crop=sheet.crop((left,top,right,bottom))
+                  out=crop.resize((W,H),Image.Resampling.LANCZOS).filter(ImageFilter.UnsharpMask(radius=1.0,percent=80,threshold=3))
+                  target=Path(prefix+name); out.save(target,'WEBP',quality=94,method=6,exact=True)
+                  check=Image.open(target); assert check.size==(W,H) and check.format=='WEBP'
+          build(os.environ['MALE_SOURCE']); build(os.environ['FEMALE_SOURCE'],'female-')
           PY
 
       - name: Verify all 16 masters exist
@@ -115,3 +115,7 @@ jobs:
           git commit -m 'Replace 16 character masters with approved reference crops'
           git pull --rebase origin main
           git push origin HEAD:main
+
+      - name: Fail visibly when source guard blocks rebuild
+        if: steps.refs.outcome != 'success'
+        run: exit 42
