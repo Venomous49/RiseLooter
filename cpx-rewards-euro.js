@@ -1,12 +1,13 @@
 (() => {
-  if (window.__RISELOOTER_CPX_EURO_V2__) return;
-  window.__RISELOOTER_CPX_EURO_V2__ = true;
+  if (window.__RISELOOTER_CPX_EURO_V3__) return;
+  window.__RISELOOTER_CPX_EURO_V3__ = true;
 
   const euro = coins => (Number(coins || 0) / 100).toLocaleString('fr-FR', {
     style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2
   });
   const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const validUrl = v => { try { const u = new URL(String(v || '')); return /^https?:$/.test(u.protocol) ? u.toString() : ''; } catch (_) { return ''; } };
   let tries = 0;
 
   function polishSurveySection(){
@@ -31,38 +32,55 @@
   }
 
   function metric(s){
+    const rawConv = s.conversion_rate ?? s.conversion ?? s.cr ?? 0;
     return {
       payout: Math.max(0, num(s.payout)),
       loi: Math.max(1, num(s.loi || s.length_of_interview || s.duration || 15)),
-      conv: Math.max(0, num(s.conversion_rate || s.conversion || s.cr || s.rating || s.quality_score || 0))
+      conv: Math.max(0, Math.min(100, num(rawConv)))
     };
   }
 
   function rankSurveys(list){
     const rows = list.map((s,i)=>({s,i,m:metric(s)}));
     const maxPayout = Math.max(1, ...rows.map(x=>x.m.payout));
-    const maxConv = Math.max(1, ...rows.map(x=>x.m.conv));
     rows.forEach(x=>{
       const payoutScore = x.m.payout / maxPayout;
-      const convScore = x.m.conv > 0 ? x.m.conv / maxConv : 0.5;
+      const convScore = x.m.conv / 100;
       const timeScore = 1 / Math.max(1, Math.sqrt(x.m.loi));
       x.score = convScore * 0.50 + payoutScore * 0.38 + timeScore * 0.12;
     });
     return rows.sort((a,b)=>b.score-a.score || b.m.payout-a.m.payout || a.m.loi-b.m.loi).slice(0,10);
   }
 
+  function ensureSurveyModal(){
+    let modal = document.getElementById('cpx-survey-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'cpx-survey-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);padding:18px;box-sizing:border-box';
+    modal.innerHTML = '<div style="width:min(1180px,100%);height:calc(100vh - 36px);margin:0 auto;background:#071018;border:1px solid #30465a;border-radius:14px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #263a4b"><strong>Sondage</strong><button type="button" id="cpx-survey-close" style="border:1px solid #42596e;background:#101923;color:#fff;border-radius:8px;padding:8px 13px;cursor:pointer;font-weight:800">Fermer</button></div><iframe id="cpx-survey-active-frame" title="Sondage" style="flex:1;width:100%;border:0;background:#fff" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
+    document.body.appendChild(modal);
+    const close = () => {
+      const frame = document.getElementById('cpx-survey-active-frame');
+      if (frame) frame.src = 'about:blank';
+      modal.style.display = 'none';
+      document.documentElement.style.overflow = '';
+    };
+    modal.querySelector('#cpx-survey-close').addEventListener('click', close);
+    modal.addEventListener('click', e=>{ if(e.target===modal) close(); });
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape' && modal.style.display==='block') close(); });
+    return modal;
+  }
+
   function showSurveyInsideRiseLooter(href){
-    const frame = document.getElementById('cpx-v9-frame');
-    const wrap = document.getElementById('cpx-v9-wrap');
-    if (!frame || !wrap) {
-      window.location.href = href;
-      return;
-    }
-    frame.src = href;
-    wrap.dataset.userOpenedSurvey = '1';
-    wrap.style.display = 'block';
-    wrap.style.marginTop = '14px';
-    wrap.scrollIntoView({behavior:'smooth', block:'start'});
+    const url = validUrl(href);
+    if (!url) return false;
+    const modal = ensureSurveyModal();
+    const frame = document.getElementById('cpx-survey-active-frame');
+    frame.src = url;
+    modal.style.display = 'block';
+    document.documentElement.style.overflow = 'hidden';
+    return true;
   }
 
   async function run(){
@@ -104,22 +122,26 @@
       const ranked = rankSurveys(surveys);
       box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">' + ranked.map((x,idx)=>{
         const s = x.s, m = x.m;
-        const href = String(s.href_new || s.href || '#');
-        const quality = m.conv > 0 ? '<span style="color:#9fb0bd"> · réussite '+esc(String(Math.round(m.conv)))+'%</span>' : '';
-        return '<button type="button" data-cpx-survey="'+esc(href)+'" style="text-align:left;display:block;width:100%;border:1px solid #25384a;border-radius:10px;padding:12px;background:#08131c;color:#fff;cursor:pointer">'+
-          '<div style="font-size:12px;color:#99a4b0">Enquête '+(idx+1)+' · '+esc(m.loi)+' min'+quality+'</div>'+
+        const href = validUrl(s.href_new) || validUrl(s.href);
+        const disabled = !href;
+        return '<button type="button" '+(href?'data-cpx-survey="'+esc(href)+'"':'disabled')+' style="text-align:left;display:block;width:100%;border:1px solid #25384a;border-radius:10px;padding:12px;background:#08131c;color:#fff;cursor:'+(disabled?'not-allowed':'pointer')+';opacity:'+(disabled?'.58':'1')+'">'+
+          '<div style="font-size:12px;color:#99a4b0">Enquête '+(idx+1)+' · '+esc(m.loi)+' min · réussite '+esc(String(Math.round(m.conv)))+'%</div>'+
           '<div style="margin-top:7px;color:#57df87;font-size:17px;font-weight:900">+'+m.payout.toLocaleString('fr-FR',{maximumFractionDigits:2})+' RL Coins</div>'+
           '<div style="margin-top:2px;color:#fff;font-size:13px;font-weight:800">= '+euro(m.payout)+'</div>'+
-          '<div style="margin-top:9px;color:#bd7dff;font-size:12px;font-weight:850">Commencer le sondage →</div>'+
+          '<div style="margin-top:9px;color:#bd7dff;font-size:12px;font-weight:850">'+(disabled?'Sondage indisponible':'Commencer le sondage →')+'</div>'+
         '</button>';
       }).join('') + '</div>';
 
       box.querySelectorAll('[data-cpx-survey]').forEach(btn=>{
-        btn.addEventListener('click',()=>showSurveyInsideRiseLooter(btn.getAttribute('data-cpx-survey')));
+        btn.addEventListener('click',e=>{
+          e.preventDefault();
+          e.stopPropagation();
+          showSurveyInsideRiseLooter(btn.getAttribute('data-cpx-survey'));
+        });
       });
 
       const wrap = document.getElementById('cpx-v9-wrap');
-      if (wrap && !wrap.dataset.userOpenedSurvey) wrap.style.display = 'none';
+      if (wrap) wrap.style.display = 'none';
     } catch (_) {
       // Existing CPX SurveyWall remains available as the fallback.
     }
