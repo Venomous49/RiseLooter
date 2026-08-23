@@ -6,14 +6,14 @@
 🌀 Starting asset upload...
 No updated asset files to upload. Proceeding with deployment...
 Total Upload: 13.64 KiB / gzip: 4.09 KiB
-Worker Startup Time: 4 ms
+Worker Startup Time: 5 ms
 Your Worker has access to the following bindings:
 Binding            Resource      
 env.ASSETS         Assets        
 
-Uploaded loot-up (4.78 sec)
-Deployed loot-up triggers (0.64 sec)
+Uploaded loot-up (5.03 sec)
+Deployed loot-up triggers (0.43 sec)
   https://loot-up.marin-iglesias.workers.dev
-Current Version ID: 39178954-26ca-4583-8585-aaf39e264164
+Current Version ID: 74087b4f-b541-42a6-b110-41a443036278
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
