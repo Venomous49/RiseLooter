@@ -22,6 +22,7 @@ on:
       - 'female-30-elite.webp'
       - 'female-40-cyber-looter.webp'
       - 'female-50-rise-looter.webp'
+      - 'master-rebuild-status.txt'
       - '.github/workflows/rebuild-gender-silhouettes.yml'
 
 permissions:
@@ -34,17 +35,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 50
+          fetch-depth: 1
 
-      - name: Guard against old masters
+      - name: Guard against old or unvalidated masters
         id: guard
         shell: bash
         run: |
-          if git log -50 --format=%s | grep -Fxq 'Replace 16 character masters with approved reference crops'; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'Approved master replacement commit is not present yet; silhouettes will not be rebuilt from old art.'
+          set -euo pipefail
+          status='master-rebuild-status.txt'
+          ready=false
+          if [ -s "$status" ] \
+             && grep -Fxq 'quality_guard=passed' "$status" \
+             && grep -Fxq 'masters=16' "$status" \
+             && grep -Fxq 'dimensions=3072x4096' "$status"; then
+            ready=true
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != true ]; then
+            echo 'Approved 16-master validation state is not present yet; silhouettes will not be rebuilt from old art.'
           fi
 
       - name: Install segmentation tools
