@@ -2235,7 +2235,7 @@ Nombre de RL Coins
 <input
 type="number"
 id="withdrawAmount"
-min="500">
+min="1000">
 
 <label>
 Adresse PayPal
@@ -2246,7 +2246,7 @@ type="email"
 id="withdrawPaypal">
 
 <div class="muted">
-Minimum : 500 RL Coins = 5 €
+Minimum : 1 000 RL Coins = 10 € • Retrait traité après validation des commissions partenaires.
 </div>
 
 <br>
@@ -4010,11 +4010,11 @@ $("withdrawPaypal")
 .trim();
 
 if(
-amount < 500
+amount < 1000
 ){
 
 alert(
-"Le minimum est de 500 RL Coins."
+"Le minimum est de 1 000 RL Coins (10 €)."
 );
 
 return;
