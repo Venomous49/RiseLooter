@@ -48,12 +48,21 @@
     return null;
   }
 
-  function findAccessToken() {
+  async function findAccessToken() {
+    // Always prefer the actual active Supabase session. The previous generic
+    // storage scan could pick a stale/unrelated JWT and incorrectly hide admin UI.
+    try {
+      if (typeof sb !== 'undefined' && sb?.auth?.getSession) {
+        const result = await sb.auth.getSession();
+        const token = result?.data?.session?.access_token;
+        if (token) return token;
+      }
+    } catch (_) {}
     return scanStorage(localStorage) || scanStorage(sessionStorage);
   }
 
   async function adminFetch(path) {
-    const token = findAccessToken();
+    const token = await findAccessToken();
     if (!token) throw new Error('not-authenticated');
     const res = await fetch(path, { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (!res.ok) throw new Error(res.status === 403 ? 'not-admin' : `admin-${res.status}`);
@@ -73,13 +82,23 @@
     return btn;
   }
 
+  function syncCreatorTestButton(isAdmin) {
+    const creatorTest = document.getElementById('creatorTestButton');
+    if (!creatorTest) return;
+    creatorTest.style.setProperty('display', isAdmin ? '' : 'none', 'important');
+    creatorTest.setAttribute('aria-hidden', isAdmin ? 'false' : 'true');
+    creatorTest.tabIndex = isAdmin ? 0 : -1;
+  }
+
   async function probeAdmin() {
     const btn = mountButton();
     try {
       await adminFetch('/api/admin/summary');
       btn.style.display = 'block';
+      syncCreatorTestButton(true);
     } catch (_) {
       btn.style.display = 'none';
+      syncCreatorTestButton(false);
     }
   }
 
@@ -115,8 +134,22 @@
   function card(label,value){return `<div style="background:#101521;border:1px solid #292f42;border-radius:16px;padding:16px"><div style="font-size:12px;color:#9da4b8;font-weight:800;text-transform:uppercase">${label}</div><div style="font-size:27px;font-weight:900;margin-top:8px">${value}</div></div>`}
   function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(probeAdmin, 300));
-  else setTimeout(probeAdmin, 300);
+  // Hide the creator test control immediately until the server verifies admin access.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      syncCreatorTestButton(false);
+      setTimeout(probeAdmin, 300);
+    });
+  } else {
+    syncCreatorTestButton(false);
+    setTimeout(probeAdmin, 300);
+  }
+
+  try {
+    if (typeof sb !== 'undefined' && sb?.auth?.onAuthStateChange) {
+      sb.auth.onAuthStateChange(() => setTimeout(probeAdmin, 50));
+    }
+  } catch (_) {}
   window.addEventListener('storage', () => setTimeout(probeAdmin, 100));
   window.addEventListener('focus', () => setTimeout(probeAdmin, 100));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(probeAdmin, 100); });
