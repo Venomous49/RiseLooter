@@ -1,5 +1,6 @@
 name: Fix canonical gender character runtime
 
+# Trigger refresh 2026-08-23T09:35+02:00
 on:
   workflow_dispatch:
   schedule:
