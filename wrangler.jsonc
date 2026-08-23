@@ -1,4 +1,5 @@
 // PayPal Live production configuration 2026-08-23
+// Force Cloudflare deploy for CPX V5 2026-08-23T13:27+02:00
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "loot-up",
