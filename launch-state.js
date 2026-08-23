@@ -5,6 +5,15 @@
 
   const byId = id => document.getElementById(id);
 
+  // Reversible visual-only layer. Remove this link to restore the previous appearance.
+  if (!document.querySelector('link[data-riselooter-visual-polish]')) {
+    const polish = document.createElement('link');
+    polish.rel = 'stylesheet';
+    polish.href = '/visual-polish-v1.css?v=20260823-v1';
+    polish.dataset.riselooterVisualPolish = '1';
+    document.head.appendChild(polish);
+  }
+
   // Keep account creation/profile logic independent from the large legacy index.html.
   if (!document.querySelector('script[data-riselooter-signup-profile]')) {
     const signupScript = document.createElement('script');
@@ -44,7 +53,6 @@
     pill.style.lineHeight = '1.15';
     pill.style.whiteSpace = 'nowrap';
 
-    // Force the original coin icon + amount + RL Coins label onto one visual line.
     let balanceLine = byId('headerBalanceLine');
     if (!balanceLine) {
       balanceLine = document.createElement('span');
@@ -56,7 +64,6 @@
       pill.insertBefore(balanceLine, euroExisting || null);
     }
 
-    // Keep the exact EUR value on the second line.
     let euroNode = byId('headerEuros');
     if (!euroNode) {
       euroNode = document.createElement('span');
@@ -154,7 +161,6 @@
 
   watchHeaderBalance();
 
-  // Re-render once after the legacy bootstrap so the zero-progress state wins deterministically.
   setTimeout(() => {
     try { if (typeof refreshUser === 'function') refreshUser(false); } catch (_) {}
     syncHeaderEuroBalance();
