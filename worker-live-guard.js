@@ -3,6 +3,7 @@ import payoutWorker from './worker-entry.js';
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const isLive=env=>String(env.PAYPAL_ENV||'sandbox').toLowerCase()==='live';
 const isSandboxEmail=email=>/@(?:personal|business)\.example\.com$/i.test(String(email||'').trim())||/@example\.com$/i.test(String(email||'').trim());
+const RESET_VERSION='launch-zero-2026-08-23-v1';
 
 function md5Hex(input){
   const s=unescape(encodeURIComponent(String(input)));
@@ -42,6 +43,8 @@ function md5Hex(input){
   return hex(a)+hex(b)+hex(c)+hex(d);
 }
 
+const serviceHeaders=env=>({apikey:env.SUPABASE_SERVICE_ROLE_KEY,authorization:`Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,'content-type':'application/json'});
+
 async function requireUser(request,env){
   if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY) return {ok:false,response:json({ok:false,error:'authentication unavailable'},503)};
   const auth=request.headers.get('authorization')||'';
@@ -60,16 +63,65 @@ async function requireAdmin(request,env){
   return guard;
 }
 
+async function ensureLaunchReset(env){
+  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.ADMIN_USER_ID) return;
+  const headers=serviceHeaders(env);
+  try{
+    const userRes=await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(env.ADMIN_USER_ID)}`,{headers,cache:'no-store'});
+    if(!userRes.ok) return;
+    const user=await userRes.json();
+    if(user?.app_metadata?.riselooter_launch_reset===RESET_VERSION) return;
+
+    const profileRes=await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(env.ADMIN_USER_ID)}`,{
+      method:'PATCH',
+      headers:{...headers,prefer:'return=minimal'},
+      body:JSON.stringify({xp:0,lootix_available:0,current_streak:0,longest_streak:0})
+    });
+    if(!profileRes.ok) return;
+
+    const app_metadata={...(user.app_metadata||{}),riselooter_launch_reset:RESET_VERSION};
+    await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(env.ADMIN_USER_ID)}`,{
+      method:'PUT',headers,body:JSON.stringify({app_metadata})
+    });
+  }catch(_){}
+}
+
+function levelFromXp(value){
+  const xp=Math.max(0,Number(value)||0);
+  if(xp<=0) return 0;
+  let level=1;
+  while(level<50 && xp>=50*level*(level+1)) level++;
+  return level;
+}
+
+async function canonicalLeaderboard(request,env){
+  const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
+  const headers=serviceHeaders(env);
+  try{
+    const profilesRes=await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?select=id,xp,current_streak&xp=gt.0&order=xp.desc&limit=50`,{headers,cache:'no-store'});
+    if(!profilesRes.ok) return json({ok:false,error:'leaderboard unavailable'},502);
+    const profiles=await profilesRes.json();
+    if(!Array.isArray(profiles)||!profiles.length) return json({ok:true,rows:[]});
+
+    const ids=profiles.map(p=>p.id).filter(Boolean);
+    const filter=ids.map(id=>`\"${String(id).replace(/\"/g,'')}\"`).join(',');
+    const claimsRes=await fetch(`${env.SUPABASE_URL}/rest/v1/username_claims?select=user_id,username&user_id=in.(${encodeURIComponent(filter)})`,{headers,cache:'no-store'});
+    const claims=claimsRes.ok?await claimsRes.json():[];
+    const names=new Map((Array.isArray(claims)?claims:[]).map(c=>[String(c.user_id),String(c.username||'').trim()]));
+
+    const ranked=profiles
+      .map(p=>({user_id:String(p.id),player_name:names.get(String(p.id))||'',xp:Math.max(0,Number(p.xp)||0),current_streak:Math.max(0,Number(p.current_streak)||0)}))
+      .filter(p=>p.player_name&&p.xp>0)
+      .sort((a,b)=>b.xp-a.xp||b.current_streak-a.current_streak||a.player_name.localeCompare(b.player_name,'fr'))
+      .map((p,i)=>({...p,rank:i+1,level:levelFromXp(p.xp)}));
+    return json({ok:true,rows:ranked});
+  }catch(_){return json({ok:false,error:'leaderboard unavailable'},502)}
+}
+
 async function cpxConfig(request,env){
   const guard=await requireUser(request,env); if(!guard.ok) return guard.response;
   const secret=String(env.CPX_APP_SECURE_HASH||env.CPX_SECURITY_HASH||'');
-  return json({
-    ok:true,
-    app_id:35504,
-    ext_user_id:String(guard.user.id),
-    secure_hash:secret?md5Hex(`${guard.user.id}-${secret}`):'',
-    secure_hash_enabled:Boolean(secret)
-  });
+  return json({ok:true,app_id:35504,ext_user_id:String(guard.user.id),secure_hash:secret?md5Hex(`${guard.user.id}-${secret}`):'',secure_hash_enabled:Boolean(secret)});
 }
 
 async function paypalHealth(request,env){
@@ -85,9 +137,10 @@ async function paypalHealth(request,env){
   }catch(_){return json({ok:false,environment:env.PAYPAL_ENV||'sandbox',oauth:false,error:'paypal unreachable'},502)}
 }
 
-class FreshCpxHead{
+class RuntimeHead{
   element(element){
-    element.append('<script src="/cpx-integration.js?v=cpx-35504-v5-20260823" defer onerror="setTimeout(function(){var s=document.createElement(\'script\');s.src=\'/cpx-integration.js?v=cpx-35504-v5-fallback-20260823\';document.head.appendChild(s)},300)"></script>',{html:true});
+    element.append('<script src="/cpx-integration.js?v=cpx-35504-v5-20260823b" defer onerror="setTimeout(function(){var s=document.createElement(\'script\');s.src=\'/cpx-integration.js?v=cpx-35504-v5-fallback-20260823b\';document.head.appendChild(s)},300)"></script>',{html:true});
+    element.append('<script src="/launch-state.js?v=launch-zero-v1" defer></script>',{html:true});
   }
 }
 
@@ -95,6 +148,7 @@ export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     if(url.pathname==='/api/cpx/config'&&request.method==='GET') return cpxConfig(request,env);
+    if(url.pathname==='/api/leaderboard'&&request.method==='GET') return canonicalLeaderboard(request,env);
     if(url.pathname==='/api/admin/paypal/health'&&request.method==='GET') return paypalHealth(request,env);
 
     if(isLive(env)&&url.pathname==='/api/withdrawals'&&request.method==='POST'){
@@ -103,10 +157,12 @@ export default {
       if(isSandboxEmail(body?.paypal_email)) return json({ok:false,error:'Sandbox PayPal addresses are forbidden in Live mode'},400);
     }
 
+    if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/index.html')) await ensureLaunchReset(env);
+
     const response=await payoutWorker.fetch(request,env,ctx);
     const ct=response.headers.get('content-type')||'';
     if(!ct.includes('text/html')) return response;
-    return new HTMLRewriter().on('head',new FreshCpxHead()).transform(response);
+    return new HTMLRewriter().on('head',new RuntimeHead()).transform(response);
   },
   async scheduled(event,env,ctx){
     if(typeof payoutWorker.scheduled==='function') return payoutWorker.scheduled(event,env,ctx);
