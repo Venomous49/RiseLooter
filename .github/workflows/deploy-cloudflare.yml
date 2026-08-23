@@ -1,11 +1,13 @@
 name: Deploy RiseLooter to Cloudflare
 
-# Final verified silhouette deployment trigger 2026-08-23
+# Runtime-complete deployment trigger 2026-08-23
 on:
   push:
     branches: [main]
     paths:
       - 'worker.js'
+      - 'worker-live-guard.js'
+      - 'worker-entry.js'
       - 'wrangler.jsonc'
       - 'index.html'
       - 'fixed-stage-home.js'
@@ -13,6 +15,8 @@ on:
       - 'site-polish-v3.js'
       - 'evolution-test-mode.js'
       - 'cpx-integration.js'
+      - 'signup-profile.js'
+      - 'launch-state.js'
       - 'admin-dashboard.js'
       - '.asset-enhance-all'
       - '01-debutant.webp'
@@ -24,7 +28,7 @@ on:
       - '40-cyber-looter.webp'
       - '50-rise-looter.webp'
       - 'female-01-debutant.webp'
-      - 'female-05-debrouillard.webp'
+      - 'female-05-debutant.webp'
       - 'female-10-chasseur.webp'
       - 'female-15-hustler.webp'
       - 'female-20-pro.webp'
