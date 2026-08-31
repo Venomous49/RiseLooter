@@ -1,5 +1,5 @@
 status=success
-source_commit=16a2ed10e32b99c90d217c5c5b498bae08854e47
+source_commit=e82ff705e50eb4aac14bc0029589e877d548dd2a
 stage_version=approved-reference-overnight
 character_assets=16
 final_dimensions=3072x4096
