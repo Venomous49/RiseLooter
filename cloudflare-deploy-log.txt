@@ -9,7 +9,7 @@
 + /cloudflare-deploy-log.txt
 Uploaded 1 of 2 assets
 Uploaded 2 of 2 assets
-✨ Success! Uploaded 2 files (616 already uploaded) (0.87 sec)
+✨ Success! Uploaded 2 files (616 already uploaded) (0.93 sec)
 
 Total Upload: 42.94 KiB / gzip: 8.96 KiB
 Worker Startup Time: 4 ms
@@ -20,10 +20,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (5.49 sec)
-Deployed loot-up triggers (0.86 sec)
+Uploaded loot-up (5.64 sec)
+Deployed loot-up triggers (1.07 sec)
   https://loot-up.marin-iglesias.workers.dev
   schedule: */10 * * * *
-Current Version ID: 8ada2bed-12ff-48bf-952a-672b288c9b7e
+Current Version ID: 83f1ef0f-164c-467c-9dbc-5a857f43ba77
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
