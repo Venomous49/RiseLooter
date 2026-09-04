@@ -10,7 +10,7 @@ npm notice This endpoint is being retired. Use the bulk advisory endpoint instea
 + /cloudflare-deploy-log.txt
 Uploaded 1 of 2 assets
 Uploaded 2 of 2 assets
-✨ Success! Uploaded 2 files (616 already uploaded) (0.84 sec)
+✨ Success! Uploaded 2 files (616 already uploaded) (0.66 sec)
 
 Total Upload: 42.94 KiB / gzip: 8.96 KiB
 Worker Startup Time: 4 ms
@@ -21,10 +21,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (5.42 sec)
-Deployed loot-up triggers (0.71 sec)
+Uploaded loot-up (4.76 sec)
+Deployed loot-up triggers (0.64 sec)
   https://loot-up.marin-iglesias.workers.dev
   schedule: */10 * * * *
-Current Version ID: 669c5537-b384-4b90-be7e-ccd614d60954
+Current Version ID: fcf2d315-c637-4a9f-a56f-2f15e1edbd99
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
