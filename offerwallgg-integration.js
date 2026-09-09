@@ -655,6 +655,15 @@
   }
 
   setTimeout(render, 1500);
+  window.addEventListener('focus', function(){
+    try{
+      if(typeof refreshUser==='function'){
+        Promise.resolve(refreshUser(false)).finally(function(){ render(); });
+      }else{
+        render();
+      }
+    }catch(_){ render(); }
+  });
 
   try{
     if (typeof sb !== 'undefined' && sb?.auth?.onAuthStateChange){
