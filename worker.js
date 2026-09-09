@@ -251,6 +251,62 @@ async function handleOfferwallGgOffers(request, env) {
   }
 }
 
+async function handleOfferwallGgOfferDetail(request, env, offerId) {
+  if (!env.OFFERWALL_GG_SECRET) return json({ ok:false, error:'Offerwall.GG not configured' },503);
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const publicKey = '4a24e196199092a1cd5e42280a9cfedb';
+  const userId = String(guard.user.id);
+  const apiUrl = new URL('https://offerwall.gg/api/v1/offers/' + encodeURIComponent(offerId));
+  apiUrl.searchParams.set('appId', publicKey);
+  apiUrl.searchParams.set('userId', userId);
+
+  try {
+    const endUserIp = (request.headers.get('CF-Connecting-IP') || request.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+    const endUserAgent = request.headers.get('user-agent') || '';
+    const headers = { 'X-Api-Key': env.OFFERWALL_GG_SECRET, 'accept':'application/json' };
+    if (endUserIp) {
+      headers['X-Forwarded-For'] = endUserIp;
+      headers['X-Real-IP'] = endUserIp;
+    }
+    if (endUserAgent) headers['User-Agent'] = endUserAgent;
+
+    const upstream = await fetch(apiUrl.toString(), { headers, cache:'no-store' });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || data?.success === false) return json({ ok:false, error:'Offerwall.GG offer details unavailable' },502);
+
+    const root = data?.data?.offer || data?.data || data?.offer || data;
+    const rawGoals = Array.isArray(root?.goals) ? root.goals
+      : Array.isArray(root?.goalLadder) ? root.goalLadder
+      : Array.isArray(root?.milestones) ? root.milestones
+      : Array.isArray(root?.steps) ? root.steps
+      : [];
+
+    const goals = rawGoals.map((g, index) => ({
+      id: g?.id ?? index,
+      title: g?.name || g?.title || g?.goal || g?.description || ('Étape ' + (index + 1)),
+      description: g?.description || g?.requirements || g?.requirement || '',
+      reward: g?.reward ?? g?.currencyAmount ?? g?.amount ?? null,
+      rewardFormatted: g?.rewardFormatted || g?.currencyAmountFormatted || g?.amountFormatted || ''
+    }));
+
+    return json({
+      ok:true,
+      offer:{
+        id: root?.id || offerId,
+        name: root?.name || root?.title || 'Jeu rémunéré',
+        requirements: root?.requirements || root?.description || '',
+        reward: root?.reward ?? null,
+        rewardFormatted: root?.rewardFormatted || '',
+        goals
+      }
+    });
+  } catch (_) {
+    return json({ ok:false, error:'Offerwall.GG offer details unavailable' },502);
+  }
+}
+
 async function handleOfferwallGgPostback(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
   const url = new URL(request.url);
@@ -301,6 +357,8 @@ export default {
     if (url.pathname === '/api/offerwallgg/postback') return handleOfferwallGgPostback(request, env);
     if (url.pathname === '/api/offerwallgg/config') return handleOfferwallGgConfig(request, env);
     if (url.pathname === '/api/offerwallgg/offers') return handleOfferwallGgOffers(request, env);
+    const offerDetailMatch = url.pathname.match(/^\/api\/offerwallgg\/offers\/([^/]+)$/);
+    if (offerDetailMatch) return handleOfferwallGgOfferDetail(request, env, offerDetailMatch[1]);
     if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
     if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
