@@ -214,8 +214,20 @@ async function handleOfferwallGgOffers(request, env) {
   apiUrl.searchParams.set('limit', '50');
 
   try {
+    const endUserIp = (request.headers.get('CF-Connecting-IP') || request.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+    const endUserAgent = request.headers.get('user-agent') || '';
+    const upstreamHeaders = {
+      'X-Api-Key': env.OFFERWALL_GG_SECRET,
+      'accept':'application/json'
+    };
+    if (endUserIp) {
+      upstreamHeaders['X-Forwarded-For'] = endUserIp;
+      upstreamHeaders['X-Real-IP'] = endUserIp;
+    }
+    if (endUserAgent) upstreamHeaders['User-Agent'] = endUserAgent;
+
     const upstream = await fetch(apiUrl.toString(), {
-      headers: { 'X-Api-Key': env.OFFERWALL_GG_SECRET, 'accept':'application/json' },
+      headers: upstreamHeaders,
       cache: 'no-store'
     });
     const data = await upstream.json().catch(() => ({}));
