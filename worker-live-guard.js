@@ -172,6 +172,10 @@ async function paypalHealth(request,env){
   }catch(_){return json({ok:false,environment:env.PAYPAL_ENV||'sandbox',oauth:false,error:'paypal unreachable'},502)}
 }
 
+class RemoveElement{
+  element(element){ element.remove(); }
+}
+
 class RuntimeHead{
   element(element){
     element.append('<link rel="stylesheet" href="/visual-polish-v1.css?v=20260823-v1">',{html:true});
@@ -182,8 +186,9 @@ class RuntimeHead{
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
-    if(url.pathname==='/api/cpx/config'&&request.method==='GET') return cpxConfig(request,env);
-    if(url.pathname==='/api/cpx/surveys'&&request.method==='GET') return cpxSurveys(request,env);
+    if((url.pathname==='/api/cpx/config'||url.pathname==='/api/cpx/surveys')&&request.method==='GET'){
+      return json({ok:false,error:'surveys disabled'},410);
+    }
     if(url.pathname==='/api/leaderboard'&&request.method==='GET') return canonicalLeaderboard(request,env);
     if(url.pathname==='/api/admin/paypal/health'&&request.method==='GET') return paypalHealth(request,env);
 
@@ -198,7 +203,12 @@ export default {
     const response=await payoutWorker.fetch(request,env,ctx);
     const ct=response.headers.get('content-type')||'';
     if(!ct.includes('text/html')) return response;
-    return new HTMLRewriter().on('head',new RuntimeHead()).transform(response);
+    return new HTMLRewriter()
+      .on('head',new RuntimeHead())
+      .on('#missions',new RemoveElement())
+      .on('script[src*="cpx"]',new RemoveElement())
+      .on('script[src*="site-polish-v3"]',new RemoveElement())
+      .transform(response);
   },
   async scheduled(event,env,ctx){
     if(typeof payoutWorker.scheduled==='function') return payoutWorker.scheduled(event,env,ctx);
