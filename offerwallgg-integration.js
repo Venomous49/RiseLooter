@@ -69,6 +69,16 @@
       #xpHistoryPanel .xp-item-amount{font-size:14px;font-weight:950;color:#c575ff;white-space:nowrap}
       #xpHistoryPanel .xp-item-amount.negative{color:#ff7b84}
       #xpHistoryPanel .xp-empty{font-size:12px;color:#94a1ad}
+      #rlHistoryPanel .rlh-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+      #rlHistoryPanel .rlh-title{font-size:19px;font-weight:950}
+      #rlHistoryPanel .rlh-sub{font-size:11px;color:#b7c2cc}
+      #rlHistoryPanel .rlh-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+      #rlHistoryPanel .rlh-item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 11px;border:1px solid #243646;border-radius:10px;background:#071019}
+      #rlHistoryPanel .rlh-item-title{font-size:12px;font-weight:900}
+      #rlHistoryPanel .rlh-item-desc{font-size:10px;color:#94a1ad;margin-top:3px}
+      #rlHistoryPanel .rlh-item-amount{font-size:14px;font-weight:950;color:#63e6a3;white-space:nowrap}
+      #rlHistoryPanel .rlh-item-amount.negative{color:#ff7b84}
+      #rlHistoryPanel .rlh-empty{font-size:12px;color:#94a1ad}
       .ow-xp-reward{font-size:12px;font-weight:900;color:#c575ff}
       .streak-xp-note{margin-top:6px;color:#c575ff;font-size:12px;font-weight:900}
       @media(max-width:700px){
@@ -224,6 +234,70 @@
     }catch(_){}
   }
 
+  function ensureRlHistorySection(){
+    let section=document.getElementById('rlHistoryPanel');
+    if(section) return section;
+
+    section=document.createElement('section');
+    section.id='rlHistoryPanel';
+    section.className='panel section';
+    section.innerHTML='<div class="rlh-head"><div class="rlh-title">🪙 Historique RL Coins</div><div class="rlh-sub">Tes gains et éventuelles annulations de récompenses.</div></div><div class="rlh-list"><div class="rlh-empty">Tes prochains gains de RL Coins apparaîtront ici.</div></div>';
+
+    const xp=document.getElementById('xpHistoryPanel');
+    if(xp) xp.insertAdjacentElement('afterend',section);
+    else document.querySelector('main')?.appendChild(section);
+    return section;
+  }
+
+  function formatRlHistoryDate(value){
+    try{
+      return new Date(value).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    }catch(_){ return ''; }
+  }
+
+  async function renderRlHistory(session){
+    const section=ensureRlHistorySection();
+    const list=section?.querySelector('.rlh-list');
+    if(!list) return;
+    if(!session?.access_token){
+      list.innerHTML='<div class="rlh-empty">Connecte-toi pour consulter ton historique RL Coins.</div>';
+      return;
+    }
+    try{
+      const res=await fetch('/api/rl/history',{headers:{authorization:'Bearer '+session.access_token},cache:'no-store'});
+      const data=await res.json();
+      if(!res.ok || !data?.ok) throw new Error();
+      const history=Array.isArray(data.history)?data.history:[];
+      if(!history.length){
+        list.innerHTML='<div class="rlh-empty">Tes prochains gains de RL Coins apparaîtront ici.</div>';
+        return;
+      }
+      list.innerHTML='';
+      history.slice(0,12).forEach(x=>{
+        const item=document.createElement('div');
+        item.className='rlh-item';
+        const left=document.createElement('div');
+        const title=document.createElement('div');
+        title.className='rlh-item-title';
+        title.textContent=x.title||'Gain de RL Coins';
+        const desc=document.createElement('div');
+        desc.className='rlh-item-desc';
+        desc.textContent=(x.description?x.description+' • ':'')+formatRlHistoryDate(x.created_at);
+        left.append(title,desc);
+
+        const amount=document.createElement('div');
+        const n=Number(x.amount||0);
+        amount.className='rlh-item-amount'+(n<0?' negative':'');
+        amount.textContent=(n>0?'+':'')+n.toLocaleString('fr-FR',{minimumFractionDigits:Math.abs(n)<1?2:0,maximumFractionDigits:2})+' RL';
+
+        item.append(left,amount);
+        list.appendChild(item);
+      });
+    }catch(_){
+      list.innerHTML='<div class="rlh-empty">Historique RL Coins momentanément indisponible.</div>';
+    }
+  }
+
   function ensureXpHistorySection(){
     let section=document.getElementById('xpHistoryPanel');
     if(section) return section;
@@ -231,7 +305,7 @@
     section=document.createElement('section');
     section.id='xpHistoryPanel';
     section.className='panel section';
-    section.innerHTML='<div class="xp-head"><div class="xp-title">✨ Historique XP</div><div class="xp-rule">25 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class="xp-list"><div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div></div>';
+    section.innerHTML='<div class="xp-head"><div class="xp-title">✨ Historique XP</div><div class="xp-rule">XP proportionnel : 25 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class="xp-list"><div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div></div>';
 
     const evolution=document.querySelector('#evolutionGrid')?.closest('section');
     const active=document.getElementById('offerwallActiveMissions');
@@ -392,6 +466,7 @@
     ensureSection();
     ensureActiveMissionsHomeSection();
     ensureXpHistorySection();
+    ensureRlHistorySection();
     ensureStreakXpNote();
 
     const box = document.getElementById('offerwallggContent');
@@ -401,6 +476,7 @@
     if(session?.user?.id) {
       refreshExactRlBalance(session);
       renderXpHistory(session);
+      renderRlHistory(session);
     }
     if (!session?.user?.id){
       box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Connecte-toi pour accéder aux jeux rémunérés.<br><button class="btn" id="offerwallggLogin">Se connecter</button></div></div>';
