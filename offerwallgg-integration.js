@@ -2,8 +2,6 @@
   if (window.__RISELOOTER_OFFERWALL_GG__) return;
   window.__RISELOOTER_OFFERWALL_GG__ = true;
 
-  const PUBLIC_KEY = '4a24e196199092a1cd5e42280a9cfedb';
-  const WALL_BASE = 'https://offerwall.gg/wall/' + PUBLIC_KEY;
 
   function ensureStyles(){
     if (document.getElementById('offerwallgg-styles')) return;
@@ -96,13 +94,25 @@
       return;
     }
 
-    const userId = encodeURIComponent(session.user.id);
-    const url = WALL_BASE + '?userId=' + userId;
+    let wallUrl = '';
+    try {
+      const res = await fetch('/api/offerwallgg/config', {
+        headers: { authorization: 'Bearer ' + session.access_token },
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.wall_url) throw new Error(data?.error || 'Offerwall unavailable');
+      wallUrl = data.wall_url;
+    } catch (_) {
+      box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Les jeux rémunérés sont momentanément indisponibles. Réessaie dans quelques instants.</div></div>';
+      return;
+    }
+
     const current = box.querySelector('iframe');
-    if (current && current.src === url) return;
+    if (current && current.src === wallUrl) return;
 
     box.innerHTML = '<div class="ow-frame-wrap"><iframe title="Jeux rémunérés RiseLooter" allow="clipboard-write" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
-    box.querySelector('iframe').src = url;
+    box.querySelector('iframe').src = wallUrl;
   }
 
   if (document.readyState === 'loading') {
