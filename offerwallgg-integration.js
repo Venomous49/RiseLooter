@@ -71,6 +71,41 @@
     return section;
   }
 
+  function translateMissionFr(text){
+    let s=String(text||'').trim();
+    if(!s) return '';
+    const rules=[
+      [/^Register\.?$/i,"S'inscrire."],
+      [/^Complete your first cashout\.?$/i,"Effectuer ton premier retrait."],
+      [/^Make a deposit\s*\(Min\.?,?\s*\$?([0-9.,]+)\)\.?$/i,"Effectuer un dépôt (minimum $1)."],
+      [/^Make a deposit\.?$/i,"Effectuer un dépôt."],
+      [/^Complete (?:the )?Level\s*([0-9]+)\.?$/i,"Atteindre le niveau $1."],
+      [/^Reach Level\s*([0-9]+)\.?$/i,"Atteindre le niveau $1."],
+      [/^Complete the Apprentice Rank\.?$/i,"Atteindre le rang Apprenti."],
+      [/^Complete the Adept Rank\.?$/i,"Atteindre le rang Adepte."],
+      [/^Complete the Scholar Rank\.?$/i,"Atteindre le rang Érudit."],
+      [/^Complete the Mage Rank\.?$/i,"Atteindre le rang Mage."],
+      [/^Complete the Enchanter Rank\.?$/i,"Atteindre le rang Enchanteur."],
+      [/^Claim your Daily Rakeback\.?$/i,"Récupérer ton rakeback quotidien."],
+      [/^Claim your Welcome Bonus\.?$/i,"Récupérer ton bonus de bienvenue."],
+      [/^Play\s*([0-9, .]+)\s*spins? on Slots?\.?$/i,"Jouer $1 tours aux machines à sous."],
+      [/^Install(?: and open)?(?: the)? (?:app|game)\.?$/i,"Installer et ouvrir le jeu."]
+    ];
+    for(const [re,fr] of rules) if(re.test(s)) return s.replace(re,fr);
+    const replacements=[
+      [/\bComplete\b/gi,'Terminer'],[/\bReach\b/gi,'Atteindre'],[/\bRegister\b/gi,"S'inscrire"],
+      [/\bMake a deposit\b/gi,'Effectuer un dépôt'],[/\bClaim\b/gi,'Récupérer'],[/\bPlay\b/gi,'Jouer'],
+      [/\bWin\b/gi,'Gagner'],[/\bPurchase\b/gi,'Acheter'],[/\bInstall\b/gi,'Installer'],[/\bOpen\b/gi,'Ouvrir'],
+      [/\bLevel\b/gi,'niveau'],[/\bRank\b/gi,'rang'],[/\bDaily\b/gi,'quotidien'],
+      [/\bWelcome Bonus\b/gi,'bonus de bienvenue'],[/\bfirst cashout\b/gi,'premier retrait'],
+      [/\bspins?\b/gi,'tours'],[/\bSlots?\b/gi,'machines à sous'],
+      [/Complete all steps listed\./gi,'Effectue toutes les étapes indiquées.'],
+      [/Earn rewards along the way\./gi,'Gagne des récompenses au fil de ta progression.']
+    ];
+    for(const [re,fr] of replacements) s=s.replace(re,fr);
+    return s;
+  }
+
   async function getSession(){
     try{
       if (typeof sb !== 'undefined' && sb?.auth) {
@@ -131,7 +166,7 @@
         title.textContent=offer.name || 'Jeu rémunéré';
         const req=document.createElement('div');
         req.style.cssText='color:#99a4b0;font-size:13px;line-height:1.4';
-        req.textContent=offer.requirements || 'Atteins les objectifs indiqués pour gagner des RL Coins.';
+        req.textContent=translateMissionFr(offer.requirements || 'Atteins les objectifs indiqués pour gagner des RL Coins.');
 
         const ladder=document.createElement('div');
         ladder.style.cssText='display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid #263848;border-radius:10px;background:#071019';
@@ -175,7 +210,7 @@
             ladder.appendChild(row);
           });
         }).catch(()=>{
-          ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+(offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+          ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
         });
         grid.appendChild(card);
       });
