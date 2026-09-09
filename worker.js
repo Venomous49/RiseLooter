@@ -186,6 +186,23 @@ async function hmacSha256Hex(secret, message) {
   return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+async function handleOfferwallGgConfig(request, env) {
+  if (!env.OFFERWALL_GG_SECRET) return json({ ok:false, error:'Offerwall.GG not configured' },503);
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const publicKey = '4a24e196199092a1cd5e42280a9cfedb';
+  const userId = String(guard.user.id);
+  // Offerwall.GG entry signature: sorted appId + userId query parameters.
+  const canonical = 'appId=' + encodeURIComponent(publicKey) + '&userId=' + encodeURIComponent(userId);
+  const signature = await hmacSha256Hex(env.OFFERWALL_GG_SECRET, canonical);
+  const wallUrl = 'https://offerwall.gg/wall/' + publicKey
+    + '?userId=' + encodeURIComponent(userId)
+    + '&signature=' + signature;
+
+  return json({ ok:true, wall_url:wallUrl });
+}
+
 async function handleOfferwallGgPostback(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
   const url = new URL(request.url);
@@ -234,6 +251,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/cpx/postback') return handleCpxPostback(request, env);
     if (url.pathname === '/api/offerwallgg/postback') return handleOfferwallGgPostback(request, env);
+    if (url.pathname === '/api/offerwallgg/config') return handleOfferwallGgConfig(request, env);
     if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
     if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
