@@ -194,7 +194,7 @@ async function handleOfferwallGgConfig(request, env) {
   const publicKey = '4a24e196199092a1cd5e42280a9cfedb';
   const userId = String(guard.user.id);
   // Offerwall.GG entry signature: sorted appId + userId query parameters.
-  const canonical = 'appId=' + encodeURIComponent(publicKey) + '&userId=' + encodeURIComponent(userId);
+  const canonical = 'appId=' + publicKey + '&userId=' + userId;
   const signature = await hmacSha256Hex(env.OFFERWALL_GG_SECRET, canonical);
   const wallUrl = 'https://offerwall.gg/wall/' + publicKey
     + '?userId=' + encodeURIComponent(userId)
