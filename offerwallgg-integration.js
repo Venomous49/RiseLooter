@@ -528,7 +528,7 @@
       }
       box.innerHTML = '<div id="ow-device-note" style="margin:0 0 10px;color:#99a4b0;font-size:12px"></div><div class="ow-filters"><button class="ow-filter active" data-platform="recommended">Pour cet appareil</button><button class="ow-filter" data-platform="all">Tous</button><button class="ow-filter" data-platform="pc">🖥️ PC</button><button class="ow-filter" data-platform="android">🤖 Android</button><button class="ow-filter" data-platform="ios">🍎 iPhone/iPad</button></div><div class="ow-native-grid"></div>';
       const note=box.querySelector('#ow-device-note');
-      note.textContent = 'Offres recommandées pour '+deviceLabel()+' et ta localisation. Les offres d’un autre appareil restent accessibles via les filtres.';
+      note.textContent = currentPlatform()==='pc' ? 'Mode PC : les offres PC/Web compatibles sont affichées en priorité. Les offres mobiles restent accessibles via leurs filtres.' : 'Mode '+deviceLabel()+' : les offres compatibles avec cet appareil sont affichées en priorité pour réduire les étapes de transfert.';
       renderActiveMissionsHome(session,activeMissions,offersById);
       const grid = box.querySelector('.ow-native-grid');
       let selectedPlatform='recommended';
@@ -581,7 +581,7 @@
 
         const compat=document.createElement('div');
         compat.className='ow-meta';
-        compat.textContent='✓ Sélectionnée pour '+deviceLabel();
+        compat.textContent=platforms.includes(currentPlatform()) ? '✓ Compatible directement avec '+deviceLabel() : '↗ Prévue pour '+platformLabel(platforms);
 
         const actions=document.createElement('div');
         actions.className='ow-actions';
