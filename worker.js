@@ -242,7 +242,12 @@ async function handleOfferwallGgOffers(request, env) {
         reward:o.reward,
         rewardFormatted:o.rewardFormatted || '',
         rewardIsVariable:Boolean(o.rewardIsVariable),
-        clickUrl:o.clickUrl || ''
+        clickUrl:o.clickUrl || '',
+        platforms: Array.isArray(o.platforms) ? o.platforms
+          : Array.isArray(o.devices) ? o.devices
+          : Array.isArray(o.deviceTypes) ? o.deviceTypes
+          : (o.platform ? [o.platform] : o.os ? [o.os] : []),
+        category: o.category || o.type || ''
       })).filter(o => o.clickUrl),
       currency:data?.data?.currency || null
     });
@@ -307,6 +312,63 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
   }
 }
 
+async function handleOfferwallGgMissionStart(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+  let body = {};
+  try { body = await request.json(); } catch (_) { return json({ok:false,error:'invalid json'},400); }
+  const offerId = String(body.offer_id || '').trim();
+  if (!offerId) return json({ok:false,error:'missing offer id'},400);
+
+  const payload = [{
+    user_id: guard.user.id,
+    offer_id: offerId,
+    offer_name: String(body.offer_name || 'Jeu rémunéré').slice(0,300),
+    requirements: String(body.requirements || '').slice(0,2000),
+    reward_display: String(body.reward_display || '').slice(0,120),
+    device_label: String(body.device_label || '').slice(0,80) || null,
+    click_url: String(body.click_url || '').slice(0,4000) || null,
+    status: 'active',
+    last_opened_at: new Date().toISOString()
+  }];
+
+  const res = await supabase(env, 'offerwall_active_missions?on_conflict=user_id,offer_id', {
+    method:'POST',
+    headers:{'Prefer':'resolution=merge-duplicates,return=representation'},
+    body:JSON.stringify(payload)
+  });
+  if (!res.ok) return json({ok:false,error:'mission tracking unavailable'},500);
+  return json({ok:true,mission:(await res.json())[0] || null});
+}
+
+async function handleOfferwallGgMissions(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [missionsRes, txRes] = await Promise.all([
+    supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) + '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at&order=last_opened_at.desc&limit=50'),
+    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,created_at&order=created_at.desc&limit=500')
+  ]);
+  if (!missionsRes.ok || !txRes.ok) return json({ok:false,error:'missions unavailable'},500);
+
+  const missions = await missionsRes.json();
+  const txs = await txRes.json();
+  const earned = new Map();
+  for (const tx of txs) {
+    const key = String(tx.offer_id || '');
+    if (!key) continue;
+    const cur = earned.get(key) || {coins:0,count:0,last_reward_at:null};
+    cur.coins += Number(tx.reward_coins || 0);
+    cur.count += 1;
+    if (!cur.last_reward_at) cur.last_reward_at = tx.created_at || null;
+    earned.set(key,cur);
+  }
+  return json({
+    ok:true,
+    missions:missions.map(m => ({...m,earned_coins:earned.get(String(m.offer_id))?.coins || 0,completed_steps:earned.get(String(m.offer_id))?.count || 0,last_reward_at:earned.get(String(m.offer_id))?.last_reward_at || m.last_reward_at || null}))
+  });
+}
+
 async function handleOfferwallGgPostback(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
   const url = new URL(request.url);
@@ -357,6 +419,13 @@ async function handleOfferwallGgPostback(request, env) {
   };
   const res = await supabase(env, 'rpc/apply_offerwall_reward', { method:'POST', body:JSON.stringify(payload) });
   if (!res.ok) return new Response('RETRY', { status:500 });
+  if (providerStatus === '1' && offerId) {
+    await supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(userId) + '&offer_id=eq.' + encodeURIComponent(offerId), {
+      method:'PATCH',
+      headers:{'Prefer':'return=minimal'},
+      body:JSON.stringify({last_reward_at:new Date().toISOString(),last_opened_at:new Date().toISOString()})
+    }).catch(()=>{});
+  }
   return new Response('OK', { status:200 });
 }
 
@@ -367,6 +436,8 @@ export default {
     if (url.pathname === '/api/offerwallgg/postback') return handleOfferwallGgPostback(request, env);
     if (url.pathname === '/api/offerwallgg/config') return handleOfferwallGgConfig(request, env);
     if (url.pathname === '/api/offerwallgg/offers') return handleOfferwallGgOffers(request, env);
+    if (url.pathname === '/api/offerwallgg/missions' && request.method === 'GET') return handleOfferwallGgMissions(request, env);
+    if (url.pathname === '/api/offerwallgg/missions/start' && request.method === 'POST') return handleOfferwallGgMissionStart(request, env);
     const offerDetailMatch = url.pathname.match(/^\/api\/offerwallgg\/offers\/([^/]+)$/);
     if (offerDetailMatch) return handleOfferwallGgOfferDetail(request, env, offerDetailMatch[1]);
     if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
