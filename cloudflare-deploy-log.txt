@@ -4,15 +4,13 @@
 🌀 Building list of assets...
 ✨ Read 918 files from the assets directory /home/runner/work/RiseLooter/RiseLooter
 🌀 Starting asset upload...
-🌀 Found 2 new or modified static assets to upload. Proceeding with upload...
-+ /cloudflare-deploy-status.txt
-+ /cloudflare-deploy-log.txt
-Uploaded 1 of 2 assets
-Uploaded 2 of 2 assets
-✨ Success! Uploaded 2 files (618 already uploaded) (0.72 sec)
+🌀 Found 1 new or modified static asset to upload. Proceeding with upload...
++ /offerwallgg-integration.js
+Uploaded 1 of 1 asset
+✨ Success! Uploaded 1 file (619 already uploaded) (0.87 sec)
 
-Total Upload: 58.15 KiB / gzip: 13.10 KiB
-Worker Startup Time: 8 ms
+Total Upload: 58.14 KiB / gzip: 13.10 KiB
+Worker Startup Time: 5 ms
 Your Worker has access to the following bindings:
 Binding                                                             Resource                  
 env.ASSETS                                                          Assets                    
@@ -20,10 +18,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (5.54 sec)
-Deployed loot-up triggers (1.53 sec)
+Uploaded loot-up (5.42 sec)
+Deployed loot-up triggers (0.92 sec)
   https://loot-up.marin-iglesias.workers.dev
   schedule: */10 * * * *
-Current Version ID: a1717c9a-6fc7-41b9-9195-7fb6e449520f
+Current Version ID: dea02fc7-6b96-43f9-b102-4523a13cec13
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
