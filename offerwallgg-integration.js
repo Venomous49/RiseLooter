@@ -3,6 +3,10 @@
   window.__RISELOOTER_OFFERWALL_GG__ = true;
 
 
+  function removeLegacySurveys(){
+    document.querySelectorAll('[data-category="survey"], .filter[data-filter="survey"]').forEach(el => el.remove());
+  }
+
   function ensureStyles(){
     if (document.getElementById('offerwallgg-styles')) return;
     const s = document.createElement('style');
@@ -77,6 +81,7 @@
   }
 
   async function render(){
+    removeLegacySurveys();
     ensureStyles();
     ensureNav();
     ensureSection();
