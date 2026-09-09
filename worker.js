@@ -209,7 +209,7 @@ function offerwallExactUserCoins(rawReward, payoutUsd, providerPerUsd, env) {
 
 function offerwallXpForCoins(value) {
   const coins = Math.max(0, Number(value || 0));
-  return Math.max(1, Math.floor(coins * 25 / 100));
+  return Math.max(1, Math.ceil(coins * 25 / 100));
 }
 
 function formatRlCoins(value) {
@@ -296,6 +296,21 @@ async function handleOfferwallGgOffers(request, env) {
   }
 }
 
+async function fetchOfferwallPlacementPerUsd(publicKey, userId, headers) {
+  try {
+    const u = new URL('https://offerwall.gg/api/v1/offers');
+    u.searchParams.set('appId', publicKey);
+    u.searchParams.set('userId', userId);
+    u.searchParams.set('limit', '1');
+    const res = await fetch(u.toString(), { headers, cache:'no-store' });
+    const data = await res.json().catch(()=>({}));
+    const perUsd = Number(data?.data?.currency?.perUsd || 0);
+    return Number.isFinite(perUsd) && perUsd > 0 ? perUsd : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 async function handleOfferwallGgOfferDetail(request, env, offerId) {
   if (!env.OFFERWALL_GG_SECRET) return json({ ok:false, error:'Offerwall.GG not configured' },503);
   const guard = await requireUser(request, env);
@@ -329,7 +344,10 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
       : [];
 
     const detailCurrency = data?.data?.currency || data?.currency || root?.currency || null;
-    const providerPerUsd = Number(detailCurrency?.perUsd || 0);
+    let providerPerUsd = Number(detailCurrency?.perUsd || 0);
+    if (!Number.isFinite(providerPerUsd) || providerPerUsd <= 0) {
+      providerPerUsd = await fetchOfferwallPlacementPerUsd(publicKey, userId, headers);
+    }
     const goals = rawGoals.map((g, index) => {
       const rawReward = g?.reward ?? g?.currencyAmount ?? g?.amount ?? 0;
       const exactReward = offerwallExactUserCoins(rawReward, g?.payoutUsd ?? g?.payout, providerPerUsd, env);
@@ -358,6 +376,67 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
   } catch (_) {
     return json({ ok:false, error:'Offerwall.GG offer details unavailable' },502);
   }
+}
+
+async function handleRlHistory(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [offerwallRes, legacyRes] = await Promise.all([
+    supabase(env,
+      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=transaction_id,offer_id,status,reward_coins_exact,reward_coins,credited,reversed,created_at&order=created_at.desc&limit=100'
+    ),
+    supabase(env,
+      'lootix_transactions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&status=eq.confirmed&select=id,amount,source_type,description,created_at&order=created_at.desc&limit=100'
+    )
+  ]);
+
+  if (!offerwallRes.ok || !legacyRes.ok) return json({ok:false,error:'rl history unavailable'},500);
+
+  const offerwall = await offerwallRes.json();
+  const legacy = await legacyRes.json();
+  const history = [];
+
+  for (const tx of offerwall) {
+    const exact = Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
+    if (tx.credited && !tx.reversed) {
+      history.push({
+        id:'ow-'+tx.transaction_id,
+        amount:exact,
+        source_type:'offerwall_mission',
+        title:'Mission de jeu validée',
+        description:tx.offer_id ? ('Offre '+tx.offer_id) : 'Offerwall.GG',
+        created_at:tx.created_at
+      });
+    } else if (tx.reversed) {
+      history.push({
+        id:'ow-rev-'+tx.transaction_id,
+        amount:-Math.abs(exact),
+        source_type:'offerwall_reversal',
+        title:'Récompense annulée',
+        description:tx.offer_id ? ('Offre '+tx.offer_id) : 'Offerwall.GG',
+        created_at:tx.created_at
+      });
+    }
+  }
+
+  for (const tx of legacy) {
+    const amount = Number(tx.amount || 0);
+    if (!amount) continue;
+    history.push({
+      id:'lt-'+tx.id,
+      amount,
+      source_type:tx.source_type || 'reward',
+      title:tx.source_type === 'daily_chest' ? 'Coffre quotidien' : 'Gain de RL Coins',
+      description:tx.description || '',
+      created_at:tx.created_at
+    });
+  }
+
+  history.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  return json({ok:true,history:history.slice(0,100)});
 }
 
 async function handleXpHistory(request, env) {
@@ -532,6 +611,7 @@ export default {
     if (url.pathname === '/api/offerwallgg/missions' && request.method === 'GET') return handleOfferwallGgMissions(request, env);
     if (url.pathname === '/api/offerwallgg/balance' && request.method === 'GET') return handleOfferwallGgExactBalance(request, env);
     if (url.pathname === '/api/xp/history' && request.method === 'GET') return handleXpHistory(request, env);
+    if (url.pathname === '/api/rl/history' && request.method === 'GET') return handleRlHistory(request, env);
     if (url.pathname === '/api/offerwallgg/missions/start' && request.method === 'POST') return handleOfferwallGgMissionStart(request, env);
     const offerDetailMatch = url.pathname.match(/^\/api\/offerwallgg\/offers\/([^/]+)$/);
     if (offerDetailMatch) return handleOfferwallGgOfferDetail(request, env, offerDetailMatch[1]);
