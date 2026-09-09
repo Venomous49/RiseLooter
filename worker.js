@@ -207,6 +207,11 @@ function offerwallExactUserCoins(rawReward, payoutUsd, providerPerUsd, env) {
   return Math.max(0, grossUsd * offerwallUserCoinRate(env));
 }
 
+function offerwallXpForCoins(value) {
+  const coins = Math.max(0, Number(value || 0));
+  return Math.max(1, Math.floor(coins * 25 / 100));
+}
+
 function formatRlCoins(value) {
   const n = Number(value || 0);
   const digits = n < 10 ? 2 : n < 100 ? 1 : 0;
@@ -274,6 +279,7 @@ async function handleOfferwallGgOffers(request, env) {
           requirements:o.requirements || '',
           reward:Number(userReward.toFixed(6)),
           rewardFormatted:formatRlCoins(userReward),
+          xpReward:offerwallXpForCoins(userReward),
           rewardIsVariable:Boolean(o.rewardIsVariable),
           clickUrl:o.clickUrl || '',
           platforms: Array.isArray(o.platforms) ? o.platforms
@@ -332,7 +338,8 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
         title: g?.name || g?.title || g?.goal || g?.description || ('Étape ' + (index + 1)),
         description: g?.description || g?.requirements || g?.requirement || '',
         reward: Number(exactReward.toFixed(6)),
-        rewardFormatted: formatRlCoins(exactReward)
+        rewardFormatted: formatRlCoins(exactReward),
+        xpReward: offerwallXpForCoins(exactReward)
       };
     });
 
@@ -344,12 +351,32 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
         requirements: root?.requirements || root?.description || '',
         reward: Number(offerwallExactUserCoins(root?.reward ?? 0, root?.payoutUsd ?? root?.payout, providerPerUsd, env).toFixed(6)),
         rewardFormatted: formatRlCoins(offerwallExactUserCoins(root?.reward ?? 0, root?.payoutUsd ?? root?.payout, providerPerUsd, env)),
+        xpReward: offerwallXpForCoins(offerwallExactUserCoins(root?.reward ?? 0, root?.payoutUsd ?? root?.payout, providerPerUsd, env)),
         goals
       }
     });
   } catch (_) {
     return json({ ok:false, error:'Offerwall.GG offer details unavailable' },502);
   }
+}
+
+async function handleXpHistory(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const res = await supabase(env,
+    'xp_history?user_id=eq.' + encodeURIComponent(guard.user.id) +
+    '&select=id,amount,source_type,source_id,title,description,created_at&order=created_at.desc&limit=100'
+  );
+  if (!res.ok) return json({ok:false,error:'xp history unavailable'},500);
+
+  const history = await res.json();
+  return json({
+    ok:true,
+    daily_streak_xp:15,
+    xp_per_100_coins:25,
+    history
+  });
 }
 
 async function handleOfferwallGgExactBalance(request, env) {
@@ -412,7 +439,7 @@ async function handleOfferwallGgMissions(request, env) {
 
   const [missionsRes, txRes] = await Promise.all([
     supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) + '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at&order=last_opened_at.desc&limit=50'),
-    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,reward_coins_exact,created_at&order=created_at.desc&limit=500')
+    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,reward_coins_exact,xp_awarded,created_at&order=created_at.desc&limit=500')
   ]);
   if (!missionsRes.ok || !txRes.ok) return json({ok:false,error:'missions unavailable'},500);
 
@@ -422,15 +449,16 @@ async function handleOfferwallGgMissions(request, env) {
   for (const tx of txs) {
     const key = String(tx.offer_id || '');
     if (!key) continue;
-    const cur = earned.get(key) || {coins:0,count:0,last_reward_at:null};
+    const cur = earned.get(key) || {coins:0,xp:0,count:0,last_reward_at:null};
     cur.coins += Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
+    cur.xp += Number(tx.xp_awarded || 0);
     cur.count += 1;
     if (!cur.last_reward_at) cur.last_reward_at = tx.created_at || null;
     earned.set(key,cur);
   }
   return json({
     ok:true,
-    missions:missions.map(m => ({...m,earned_coins:earned.get(String(m.offer_id))?.coins || 0,completed_steps:earned.get(String(m.offer_id))?.count || 0,last_reward_at:earned.get(String(m.offer_id))?.last_reward_at || m.last_reward_at || null}))
+    missions:missions.map(m => ({...m,earned_coins:earned.get(String(m.offer_id))?.coins || 0,earned_xp:earned.get(String(m.offer_id))?.xp || 0,completed_steps:earned.get(String(m.offer_id))?.count || 0,last_reward_at:earned.get(String(m.offer_id))?.last_reward_at || m.last_reward_at || null}))
   });
 }
 
@@ -503,6 +531,7 @@ export default {
     if (url.pathname === '/api/offerwallgg/offers') return handleOfferwallGgOffers(request, env);
     if (url.pathname === '/api/offerwallgg/missions' && request.method === 'GET') return handleOfferwallGgMissions(request, env);
     if (url.pathname === '/api/offerwallgg/balance' && request.method === 'GET') return handleOfferwallGgExactBalance(request, env);
+    if (url.pathname === '/api/xp/history' && request.method === 'GET') return handleXpHistory(request, env);
     if (url.pathname === '/api/offerwallgg/missions/start' && request.method === 'POST') return handleOfferwallGgMissionStart(request, env);
     const offerDetailMatch = url.pathname.match(/^\/api\/offerwallgg\/offers\/([^/]+)$/);
     if (offerDetailMatch) return handleOfferwallGgOfferDetail(request, env, offerDetailMatch[1]);
