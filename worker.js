@@ -201,6 +201,44 @@ async function handleOfferwallGgConfig(request, env) {
   return json({ ok:true, wall_url:wallUrl });
 }
 
+async function handleOfferwallGgOffers(request, env) {
+  if (!env.OFFERWALL_GG_SECRET) return json({ ok:false, error:'Offerwall.GG not configured' },503);
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const publicKey = '4a24e196199092a1cd5e42280a9cfedb';
+  const userId = String(guard.user.id);
+  const apiUrl = new URL('https://offerwall.gg/api/v1/offers');
+  apiUrl.searchParams.set('appId', publicKey);
+  apiUrl.searchParams.set('userId', userId);
+  apiUrl.searchParams.set('limit', '50');
+
+  try {
+    const upstream = await fetch(apiUrl.toString(), {
+      headers: { 'X-Api-Key': env.OFFERWALL_GG_SECRET, 'accept':'application/json' },
+      cache: 'no-store'
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || data?.success === false) return json({ ok:false, error:'Offerwall.GG inventory unavailable' },502);
+    const offers = Array.isArray(data?.data?.offers) ? data.data.offers : [];
+    return json({
+      ok:true,
+      offers: offers.map(o => ({
+        id:o.id,
+        name:o.name || 'Jeu rémunéré',
+        requirements:o.requirements || '',
+        reward:o.reward,
+        rewardFormatted:o.rewardFormatted || '',
+        rewardIsVariable:Boolean(o.rewardIsVariable),
+        clickUrl:o.clickUrl || ''
+      })).filter(o => o.clickUrl),
+      currency:data?.data?.currency || null
+    });
+  } catch (_) {
+    return json({ ok:false, error:'Offerwall.GG inventory unavailable' },502);
+  }
+}
+
 async function handleOfferwallGgPostback(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
   const url = new URL(request.url);
@@ -250,6 +288,7 @@ export default {
     if (url.pathname === '/api/cpx/postback') return handleCpxPostback(request, env);
     if (url.pathname === '/api/offerwallgg/postback') return handleOfferwallGgPostback(request, env);
     if (url.pathname === '/api/offerwallgg/config') return handleOfferwallGgConfig(request, env);
+    if (url.pathname === '/api/offerwallgg/offers') return handleOfferwallGgOffers(request, env);
     if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
     if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
