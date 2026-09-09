@@ -512,32 +512,64 @@ async function handleOfferwallGgMissionStart(request, env) {
   return json({ok:true,mission:(await res.json())[0] || null});
 }
 
+function normalizeOfferwallName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+}
+
+async function findMatchingActiveMission(env, userId, offerName) {
+  try {
+    const res = await supabase(env,
+      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(userId) +
+      '&status=eq.active&select=offer_id,offer_name,earned_coins_exact,earned_xp,completed_steps,last_opened_at&order=last_opened_at.desc&limit=50'
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return null;
+
+    const target = normalizeOfferwallName(offerName);
+    if (target) {
+      const exact = rows.find(r => normalizeOfferwallName(r.offer_name) === target);
+      if (exact) return exact;
+      const partial = rows.find(r => {
+        const n = normalizeOfferwallName(r.offer_name);
+        return n && (n.includes(target) || target.includes(n));
+      });
+      if (partial) return partial;
+    }
+
+    // Fallback only when the most recently opened mission is recent enough.
+    const latest = rows[0];
+    const ageMs = latest?.last_opened_at ? Date.now() - new Date(latest.last_opened_at).getTime() : Infinity;
+    return ageMs >= 0 && ageMs <= 6 * 60 * 60 * 1000 ? latest : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function handleOfferwallGgMissions(request, env) {
   const guard = await requireUser(request, env);
   if (!guard.ok) return guard.response;
 
-  const [missionsRes, txRes] = await Promise.all([
-    supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) + '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at&order=last_opened_at.desc&limit=50'),
-    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,reward_coins_exact,xp_awarded,created_at&order=created_at.desc&limit=500')
-  ]);
-  if (!missionsRes.ok || !txRes.ok) return json({ok:false,error:'missions unavailable'},500);
+  const missionsRes = await supabase(env,
+    'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+    '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps&order=last_opened_at.desc&limit=50'
+  );
+  if (!missionsRes.ok) return json({ok:false,error:'missions unavailable'},500);
 
   const missions = await missionsRes.json();
-  const txs = await txRes.json();
-  const earned = new Map();
-  for (const tx of txs) {
-    const key = String(tx.offer_id || '');
-    if (!key) continue;
-    const cur = earned.get(key) || {coins:0,xp:0,count:0,last_reward_at:null};
-    cur.coins += Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
-    cur.xp += Number(tx.xp_awarded || 0);
-    cur.count += 1;
-    if (!cur.last_reward_at) cur.last_reward_at = tx.created_at || null;
-    earned.set(key,cur);
-  }
   return json({
     ok:true,
-    missions:missions.map(m => ({...m,earned_coins:earned.get(String(m.offer_id))?.coins || 0,earned_xp:earned.get(String(m.offer_id))?.xp || 0,completed_steps:earned.get(String(m.offer_id))?.count || 0,last_reward_at:earned.get(String(m.offer_id))?.last_reward_at || m.last_reward_at || null}))
+    missions:missions.map(m => ({
+      ...m,
+      earned_coins:Number(m.earned_coins_exact || 0),
+      earned_xp:Number(m.earned_xp || 0),
+      completed_steps:Number(m.completed_steps || 0)
+    }))
   });
 }
 
@@ -562,6 +594,8 @@ async function handleOfferwallGgPostback(request, env) {
   const signature = String(p.get('sig') || p.get('signature') || p.get('hash') || '').toLowerCase();
   const test = String(p.get('test') || '0') === '1';
   const offerId = p.get('offerId') || p.get('offer_id') || null;
+  const offerName = p.get('offerName') || p.get('offer_name') || '';
+  const goalId = p.get('goalId') || p.get('goal_id') || '';
   const payoutUsd = Number(p.get('payoutUsd') || p.get('payout_usd') || 0);
 
   if (!userId || !txId || !amountRaw || !signature || !['credited','reversed'].includes(statusRaw)) {
@@ -591,13 +625,35 @@ async function handleOfferwallGgPostback(request, env) {
   };
   const res = await supabase(env, 'rpc/apply_offerwall_reward_v2', { method:'POST', body:JSON.stringify(payload) });
   if (!res.ok) return new Response('RETRY', { status:500 });
-  if (providerStatus === '1' && offerId) {
-    await supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(userId) + '&offer_id=eq.' + encodeURIComponent(offerId), {
-      method:'PATCH',
-      headers:{'Prefer':'return=minimal'},
-      body:JSON.stringify({last_reward_at:new Date().toISOString(),last_opened_at:new Date().toISOString()})
-    }).catch(()=>{});
+
+  let rpcData = {};
+  try { rpcData = await res.json(); } catch (_) {}
+  const xpDelta = Number(rpcData?.user_xp_delta || 0);
+  const coinDelta = providerStatus === '1' ? exactRewardCoins : -exactRewardCoins;
+
+  const mission = await findMatchingActiveMission(env, userId, offerName);
+  if (mission) {
+    const nextCoins = Math.max(0, Number(mission.earned_coins_exact || 0) + coinDelta);
+    const nextXp = Math.max(0, Number(mission.earned_xp || 0) + xpDelta);
+    const nextSteps = Math.max(0, Number(mission.completed_steps || 0) + (providerStatus === '1' ? 1 : -1));
+    await supabase(env,
+      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(userId) +
+      '&offer_id=eq.' + encodeURIComponent(mission.offer_id),
+      {
+        method:'PATCH',
+        headers:{'Prefer':'return=minimal'},
+        body:JSON.stringify({
+          earned_coins_exact:Number(nextCoins.toFixed(6)),
+          earned_xp:nextXp,
+          completed_steps:nextSteps,
+          last_network_offer_id:offerId,
+          last_goal_id:goalId || null,
+          last_reward_at:new Date().toISOString()
+        })
+      }
+    ).catch(()=>{});
   }
+
   return new Response('OK', { status:200 });
 }
 
