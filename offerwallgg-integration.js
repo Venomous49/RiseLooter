@@ -305,7 +305,7 @@
     section=document.createElement('section');
     section.id='xpHistoryPanel';
     section.className='panel section';
-    section.innerHTML='<div class="xp-head"><div class="xp-title">✨ Historique XP</div><div class="xp-rule">XP proportionnel : 25 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class="xp-list"><div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div></div>';
+    section.innerHTML='<div class="xp-head"><div class="xp-title">✨ Historique XP</div><div class="xp-rule">XP proportionnel : 100 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class="xp-list"><div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div></div>';
 
     const evolution=document.querySelector('#evolutionGrid')?.closest('section');
     const active=document.getElementById('offerwallActiveMissions');
@@ -422,7 +422,7 @@
 
       const meta=document.createElement('div');
       meta.className='ow-home-mission-meta';
-      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR',{minimumFractionDigits:Number(m.earned_coins||0)<1?2:0,maximumFractionDigits:2})+' RL Coins gagnés</strong> • <span style="color:#c575ff;font-weight:900">+'+Number(m.earned_xp||0).toLocaleString('fr-FR')+' XP</span> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
+      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR',{minimumFractionDigits:Number(m.earned_coins||0)<1?2:0,maximumFractionDigits:2})+' RL Coins réellement gagnés</strong> • <span style="color:#c575ff;font-weight:900">+'+Number(m.earned_xp||0).toLocaleString('fr-FR')+' XP</span> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
 
       left.append(name,meta);
 
