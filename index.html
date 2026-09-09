@@ -1757,6 +1757,22 @@ nav [data-nav="shop"],nav [data-nav="inventory"]{display:none!important}
 }
 
 </style>
+<style id="no-surveys-permanent">#missions .filters [data-filter="survey"],#challenges [data-category="survey"]{display:none!important}</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  function removeSurveys(){
+    document.querySelectorAll('#missions .filters [data-filter="survey"],#challenges [data-category="survey"]').forEach(function(el){el.remove()});
+    var section=document.getElementById('missions');
+    if(section){
+      var subtitle=section.querySelector('.section-subtitle');
+      if(subtitle && /sondage|enqu[eê]te/i.test(subtitle.textContent||'')) subtitle.textContent='Joue, atteins les objectifs proposés et gagne des RL Coins.';
+      section.querySelectorAll('.mission').forEach(function(card){if(/sondage|enqu[eê]te/i.test(card.textContent||''))card.remove()});
+    }
+  }
+  removeSurveys();
+  new MutationObserver(removeSurveys).observe(document.body,{childList:true,subtree:true});
+});
+</script>
 </head>
 
 <body>
