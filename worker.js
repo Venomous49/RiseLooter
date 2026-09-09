@@ -178,10 +178,62 @@ async function handleCpxPostback(request, env) {
   });
 }
 
+
+async function hmacSha256Hex(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(String(secret)), { name:'HMAC', hash:'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(String(message)));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function handleOfferwallGgPostback(request, env) {
+  if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
+  const url = new URL(request.url);
+  const p = url.searchParams;
+  const userId = p.get('user') || p.get('userId') || p.get('user_id') || p.get('subid') || '';
+  const txId = p.get('tx') || p.get('transactionId') || p.get('txid') || p.get('trans_id') || '';
+  const amountRaw = p.get('amount') || p.get('currencyAmount') || p.get('points') || p.get('reward') || '';
+  const statusRaw = String(p.get('status') || 'credited').toLowerCase();
+  const signature = String(p.get('sig') || p.get('signature') || p.get('hash') || '').toLowerCase();
+  const test = String(p.get('test') || '0') === '1';
+  const offerId = p.get('offerId') || p.get('offer_id') || null;
+  const payoutUsd = Number(p.get('payoutUsd') || p.get('payout_usd') || 0);
+
+  if (!userId || !txId || !amountRaw || !signature || !['credited','reversed'].includes(statusRaw)) {
+    return new Response('BAD_REQUEST', { status:400 });
+  }
+  const amount = Number(amountRaw);
+  if (!Number.isFinite(amount)) return new Response('BAD_REQUEST', { status:400 });
+
+  const expected = await hmacSha256Hex(env.OFFERWALL_GG_SECRET, userId + ':' + txId + ':' + amountRaw);
+  if (!timingSafeEqual(signature, expected)) return new Response('FORBIDDEN', { status:403 });
+  if (test) return new Response('OK', { status:200 });
+
+  // Placement currency is RL Coins (100 coins = €1). Offerwall.GG sends currencyAmount
+  // already expressed in that configured virtual currency, so never apply the CPX 70/30 split again.
+  const rewardCoins = Math.max(0, Math.trunc(Math.abs(amount)));
+  const providerStatus = statusRaw === 'credited' ? '1' : '2';
+  const grossUsd = Number.isFinite(payoutUsd) ? Math.abs(payoutUsd) : 0;
+
+  const payload = {
+    p_provider: 'offerwallgg',
+    p_transaction_id: txId,
+    p_user_id: userId,
+    p_offer_id: offerId,
+    p_status: providerStatus,
+    p_amount_usd: grossUsd,
+    p_reward_coins: rewardCoins
+  };
+  const res = await supabase(env, 'rpc/apply_offerwall_reward', { method:'POST', body:JSON.stringify(payload) });
+  if (!res.ok) return new Response('RETRY', { status:500 });
+  return new Response('OK', { status:200 });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/cpx/postback') return handleCpxPostback(request, env);
+    if (url.pathname === '/api/offerwallgg/postback') return handleOfferwallGgPostback(request, env);
     if (url.pathname === '/api/cpx/config') return handleCpxConfig(request, env);
     if (url.pathname === '/api/admin/summary') return handleAdminSummary(request, env);
 
