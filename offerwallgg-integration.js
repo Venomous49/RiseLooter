@@ -488,21 +488,39 @@
     }
 
     try {
-      const [res,missionsRes] = await Promise.all([
-        fetch('/api/offerwallgg/offers', {
+      // The games catalogue is the critical request. Secondary widgets such as
+      // "Missions en cours" must never be able to blank the whole games section.
+      let res = await fetch('/api/offerwallgg/offers', {
+        headers: { authorization: 'Bearer ' + session.access_token },
+        cache: 'no-store'
+      });
+      let data = await res.json().catch(()=>({}));
+
+      // One quick retry protects the UI from a transient upstream Offerwall error.
+      if (!res.ok || !data?.ok) {
+        await new Promise(resolve=>setTimeout(resolve,350));
+        res = await fetch('/api/offerwallgg/offers', {
           headers: { authorization: 'Bearer ' + session.access_token },
           cache: 'no-store'
-        }),
-        fetch('/api/offerwallgg/missions', {
-          headers: { authorization: 'Bearer ' + session.access_token },
-          cache: 'no-store'
-        })
-      ]);
-      const data = await res.json();
-      const missionsData = await missionsRes.json().catch(()=>({ok:false,missions:[]}));
+        });
+        data = await res.json().catch(()=>({}));
+      }
+
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Offerwall unavailable');
+
       const offers = Array.isArray(data.offers) ? data.offers : [];
-      const activeMissions = missionsRes.ok && missionsData?.ok && Array.isArray(missionsData.missions) ? missionsData.missions : [];
+      let activeMissions = [];
+      try{
+        const missionsRes = await fetch('/api/offerwallgg/missions', {
+          headers: { authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        });
+        const missionsData = await missionsRes.json().catch(()=>({ok:false,missions:[]}));
+        if (missionsRes.ok && missionsData?.ok && Array.isArray(missionsData.missions)) {
+          activeMissions = missionsData.missions;
+        }
+      }catch(_){}
+
       const offersById = new Map(offers.map(o=>[String(o.id),o]));
       if (!offers.length) {
         box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:24px;text-align:center">Aucun jeu rémunéré disponible pour ton appareil ou ton pays actuellement.</div>';
