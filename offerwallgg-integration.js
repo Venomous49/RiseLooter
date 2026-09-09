@@ -66,7 +66,7 @@
     const evolution = document.getElementById('evolution');
     if (missions?.parentNode) missions.parentNode.insertBefore(section, missions.nextSibling);
     else if (evolution?.parentNode) evolution.parentNode.insertBefore(section, evolution);
-    else document.querySelector('main .wrapper')?.appendChild(section);
+    else document.querySelector('main')?.appendChild(section);
 
     return section;
   }
