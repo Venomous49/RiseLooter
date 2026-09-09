@@ -38,25 +38,7 @@
     btn.type = 'button';
     btn.textContent = 'JEUX';
     btn.setAttribute('data-offerwallgg-nav','1');
-    btn.onclick = async () => {
-      const session = await getSession();
-      if (!session?.access_token) {
-        if (typeof openAuth === 'function') openAuth();
-        else document.getElementById('authButton')?.click();
-        return;
-      }
-      try {
-        const res = await fetch('/api/offerwallgg/config', {
-          headers: { authorization: 'Bearer ' + session.access_token },
-          cache: 'no-store'
-        });
-        const data = await res.json();
-        if (!res.ok || !data?.wall_url) throw new Error('Offerwall unavailable');
-        window.open(data.wall_url, '_blank', 'noopener');
-      } catch (_) {
-        alert('Les jeux rémunérés sont momentanément indisponibles.');
-      }
-    };
+    btn.onclick = () => document.getElementById('gamesOfferwall')?.scrollIntoView({behavior:'smooth',block:'start'});
     const missionsBtn = nav.querySelector('[data-nav="missions"]');
     if (missionsBtn && missionsBtn.nextSibling) nav.insertBefore(btn, missionsBtn.nextSibling);
     else nav.appendChild(btn);
@@ -117,24 +99,42 @@
       return;
     }
 
-    let wallUrl = '';
     try {
-      const res = await fetch('/api/offerwallgg/config', {
+      const res = await fetch('/api/offerwallgg/offers', {
         headers: { authorization: 'Bearer ' + session.access_token },
         cache: 'no-store'
       });
       const data = await res.json();
-      if (!res.ok || !data?.wall_url) throw new Error(data?.error || 'Offerwall unavailable');
-      wallUrl = data.wall_url;
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Offerwall unavailable');
+      const offers = Array.isArray(data.offers) ? data.offers : [];
+      if (!offers.length) {
+        box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:24px;text-align:center">Aucun jeu rémunéré disponible pour ton appareil ou ton pays actuellement.</div>';
+        return;
+      }
+      box.innerHTML = '<div class="ow-native-grid"></div>';
+      const grid = box.querySelector('.ow-native-grid');
+      grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px';
+      offers.forEach(offer => {
+        const card=document.createElement('article');
+        card.className='panel';
+        card.style.cssText='padding:16px;display:flex;flex-direction:column;gap:10px;min-height:190px';
+        const title=document.createElement('strong');
+        title.textContent=offer.name || 'Jeu rémunéré';
+        const req=document.createElement('div');
+        req.style.cssText='color:#99a4b0;font-size:13px;line-height:1.4;flex:1';
+        req.textContent=offer.requirements || 'Atteins les objectifs indiqués pour gagner des RL Coins.';
+        const reward=document.createElement('div');
+        reward.style.cssText='font-weight:900;color:#63e6a3';
+        reward.textContent=offer.rewardFormatted || ((offer.reward||0)+' RL Coins');
+        const go=document.createElement('button');
+        go.type='button'; go.className='btn'; go.textContent='Jouer';
+        go.addEventListener('click',()=>{ window.location.href=offer.clickUrl; });
+        card.append(title,req,reward,go);
+        grid.appendChild(card);
+      });
     } catch (_) {
       box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Les jeux rémunérés sont momentanément indisponibles. Réessaie dans quelques instants.</div></div>';
-      return;
     }
-
-    box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:22px;text-align:center"><div style="font-weight:900;font-size:18px;margin-bottom:8px">🎮 Accéder aux jeux rémunérés</div><div style="color:#99a4b0;margin-bottom:14px">Les jeux s\'ouvrent dans une page sécurisée Offerwall.GG liée à ton compte RiseLooter.</div><button type="button" class="btn" id="offerwallggOpenGames">Ouvrir les jeux</button></div>';
-    document.getElementById('offerwallggOpenGames')?.addEventListener('click', () => {
-      window.open(wallUrl, '_blank', 'noopener');
-    });
   }
 
   if (document.readyState === 'loading') {
