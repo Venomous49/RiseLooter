@@ -555,21 +555,60 @@ async function handleOfferwallGgMissions(request, env) {
   const guard = await requireUser(request, env);
   if (!guard.ok) return guard.response;
 
-  const missionsRes = await supabase(env,
-    'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
-    '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps&order=last_opened_at.desc&limit=50'
-  );
+  const [missionsRes, txRes] = await Promise.all([
+    supabase(env,
+      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps&order=last_opened_at.desc&limit=50'
+    ),
+    supabase(env,
+      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&credited=eq.true&reversed=eq.false&select=reward_coins_exact,reward_coins,xp_awarded,created_at&order=created_at.asc&limit=500'
+    )
+  ]);
   if (!missionsRes.ok) return json({ok:false,error:'missions unavailable'},500);
 
   const missions = await missionsRes.json();
+  const txs = txRes.ok ? await txRes.json() : [];
+
+  // Compatibility fallback for conversions made before direct mission-progress
+  // tracking existed: attach them to the most recently opened mission within 6h.
+  const fallback = new Map();
+  for (const tx of txs) {
+    const txTime = new Date(tx.created_at).getTime();
+    let best = null;
+    for (const mission of missions) {
+      const opened = new Date(mission.last_opened_at || mission.started_at || 0).getTime();
+      if (!Number.isFinite(opened) || opened > txTime) continue;
+      const age = txTime - opened;
+      if (age > 6 * 60 * 60 * 1000) continue;
+      if (!best || opened > best.opened) best = { mission, opened };
+    }
+    if (!best) continue;
+    const key = String(best.mission.offer_id);
+    const cur = fallback.get(key) || { coins:0, xp:0, steps:0, last_reward_at:null };
+    cur.coins += Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
+    cur.xp += Number(tx.xp_awarded || 0);
+    cur.steps += 1;
+    cur.last_reward_at = tx.created_at || cur.last_reward_at;
+    fallback.set(key,cur);
+  }
+
   return json({
     ok:true,
-    missions:missions.map(m => ({
-      ...m,
-      earned_coins:Number(m.earned_coins_exact || 0),
-      earned_xp:Number(m.earned_xp || 0),
-      completed_steps:Number(m.completed_steps || 0)
-    }))
+    missions:missions.map(m => {
+      const directCoins = Number(m.earned_coins_exact || 0);
+      const directXp = Number(m.earned_xp || 0);
+      const directSteps = Number(m.completed_steps || 0);
+      const old = fallback.get(String(m.offer_id)) || {coins:0,xp:0,steps:0,last_reward_at:null};
+      const useDirect = directCoins !== 0 || directXp !== 0 || directSteps !== 0;
+      return {
+        ...m,
+        earned_coins:useDirect ? directCoins : old.coins,
+        earned_xp:useDirect ? directXp : old.xp,
+        completed_steps:useDirect ? directSteps : old.steps,
+        last_reward_at:m.last_reward_at || old.last_reward_at || null
+      };
+    })
   });
 }
 
