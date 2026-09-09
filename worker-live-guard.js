@@ -206,6 +206,7 @@ export default {
     return new HTMLRewriter()
       .on('head',new RuntimeHead())
       .on('#missions',new RemoveElement())
+      .on('#challenges',new RemoveElement())
       .on('script[src*="cpx"]',new RemoveElement())
       .on('script[src*="site-polish-v3"]',new RemoveElement())
       .transform(response);
