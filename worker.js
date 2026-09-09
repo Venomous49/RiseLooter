@@ -352,6 +352,31 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
   }
 }
 
+async function handleOfferwallGgExactBalance(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [profileRes, accrualRes] = await Promise.all([
+    supabase(env, 'profiles?id=eq.' + encodeURIComponent(guard.user.id) + '&select=lootix_available'),
+    supabase(env, 'offerwall_reward_accruals?user_id=eq.' + encodeURIComponent(guard.user.id) + '&select=fractional_coins')
+  ]);
+  if (!profileRes.ok || !accrualRes.ok) return json({ok:false,error:'balance unavailable'},500);
+
+  const profiles = await profileRes.json();
+  const accruals = await accrualRes.json();
+  const whole = Number(profiles?.[0]?.lootix_available || 0);
+  const fractional = Number(accruals?.[0]?.fractional_coins || 0);
+  const exact = whole + fractional;
+
+  return json({
+    ok:true,
+    whole_coins:whole,
+    fractional_coins:Number(fractional.toFixed(6)),
+    exact_coins:Number(exact.toFixed(6)),
+    euro_value:Number((exact/100).toFixed(4))
+  });
+}
+
 async function handleOfferwallGgMissionStart(request, env) {
   const guard = await requireUser(request, env);
   if (!guard.ok) return guard.response;
@@ -387,7 +412,7 @@ async function handleOfferwallGgMissions(request, env) {
 
   const [missionsRes, txRes] = await Promise.all([
     supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) + '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at&order=last_opened_at.desc&limit=50'),
-    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,created_at&order=created_at.desc&limit=500')
+    supabase(env, 'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) + '&credited=eq.true&reversed=eq.false&select=offer_id,reward_coins,reward_coins_exact,created_at&order=created_at.desc&limit=500')
   ]);
   if (!missionsRes.ok || !txRes.ok) return json({ok:false,error:'missions unavailable'},500);
 
@@ -398,7 +423,7 @@ async function handleOfferwallGgMissions(request, env) {
     const key = String(tx.offer_id || '');
     if (!key) continue;
     const cur = earned.get(key) || {coins:0,count:0,last_reward_at:null};
-    cur.coins += Number(tx.reward_coins || 0);
+    cur.coins += Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
     cur.count += 1;
     if (!cur.last_reward_at) cur.last_reward_at = tx.created_at || null;
     earned.set(key,cur);
@@ -477,6 +502,7 @@ export default {
     if (url.pathname === '/api/offerwallgg/config') return handleOfferwallGgConfig(request, env);
     if (url.pathname === '/api/offerwallgg/offers') return handleOfferwallGgOffers(request, env);
     if (url.pathname === '/api/offerwallgg/missions' && request.method === 'GET') return handleOfferwallGgMissions(request, env);
+    if (url.pathname === '/api/offerwallgg/balance' && request.method === 'GET') return handleOfferwallGgExactBalance(request, env);
     if (url.pathname === '/api/offerwallgg/missions/start' && request.method === 'POST') return handleOfferwallGgMissionStart(request, env);
     const offerDetailMatch = url.pathname.match(/^\/api\/offerwallgg\/offers\/([^/]+)$/);
     if (offerDetailMatch) return handleOfferwallGgOfferDetail(request, env, offerDetailMatch[1]);
