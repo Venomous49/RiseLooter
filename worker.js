@@ -310,7 +310,17 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
 async function handleOfferwallGgPostback(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return new Response('NOT_CONFIGURED', { status:503 });
   const url = new URL(request.url);
-  const p = url.searchParams;
+  // Offerwall.GG can deliver callbacks either as GET query parameters or
+  // application/x-www-form-urlencoded POST fields. Accept both so changing
+  // the placement delivery method cannot silently break rewards.
+  const p = new URLSearchParams(url.searchParams);
+  if (request.method === 'POST') {
+    const ct = (request.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('application/x-www-form-urlencoded')) {
+      const form = new URLSearchParams(await request.text());
+      for (const [k,v] of form) if (!p.has(k)) p.set(k,v);
+    }
+  }
   const userId = p.get('user') || p.get('userId') || p.get('user_id') || p.get('subid') || '';
   const txId = p.get('tx') || p.get('transactionId') || p.get('txid') || p.get('trans_id') || '';
   const amountRaw = p.get('amount') || p.get('currencyAmount') || p.get('points') || p.get('reward') || '';
