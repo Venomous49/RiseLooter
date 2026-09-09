@@ -130,18 +130,53 @@
         const title=document.createElement('strong');
         title.textContent=offer.name || 'Jeu rémunéré';
         const req=document.createElement('div');
-        req.style.cssText='color:#99a4b0;font-size:13px;line-height:1.4;flex:1';
+        req.style.cssText='color:#99a4b0;font-size:13px;line-height:1.4';
         req.textContent=offer.requirements || 'Atteins les objectifs indiqués pour gagner des RL Coins.';
+
+        const ladder=document.createElement('div');
+        ladder.style.cssText='display:flex;flex-direction:column;gap:7px;padding:10px;border:1px solid #263848;border-radius:10px;background:#071019';
+        ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Missions et récompenses</div><div style="font-size:12px;color:#99a4b0">Chargement des objectifs…</div>';
+
         const reward=document.createElement('div');
         reward.style.cssText='font-weight:900;color:#63e6a3';
         reward.textContent=offer.rewardFormatted || ((offer.reward||0)+' RL Coins');
+
         const compat=document.createElement('div');
         compat.style.cssText='font-size:11px;font-weight:800;opacity:.9';
         compat.textContent='✓ Sélectionnée pour '+deviceLabel();
+
         const go=document.createElement('button');
         go.type='button'; go.className='btn'; go.textContent='Commencer';
         go.addEventListener('click',()=>{ window.location.assign(offer.clickUrl); });
-        card.append(title,req,reward,compat,go);
+
+        card.append(title,req,ladder,reward,compat,go);
+
+        fetch('/api/offerwallgg/offers/'+encodeURIComponent(offer.id), {
+          headers:{authorization:'Bearer '+session.access_token},
+          cache:'no-store'
+        }).then(r=>r.json().then(data=>({ok:r.ok,data}))).then(({ok,data})=>{
+          const details=data?.offer||{};
+          const goals=Array.isArray(details.goals)?details.goals:[];
+          if(!ok || !goals.length){
+            ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+(details.requirements||offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+            return;
+          }
+          ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Missions et récompenses</div>';
+          goals.forEach((goal,idx)=>{
+            const row=document.createElement('div');
+            row.style.cssText='display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding-top:7px;border-top:1px solid #1c2c38';
+            const left=document.createElement('div');
+            left.style.cssText='font-size:12px;line-height:1.35';
+            left.textContent=(idx+1)+'. '+(goal.title||goal.description||'Objectif');
+            const right=document.createElement('div');
+            right.style.cssText='font-size:12px;font-weight:900;color:#63e6a3;white-space:nowrap';
+            right.textContent=goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : '');
+            row.append(left,right);
+            ladder.appendChild(row);
+          });
+        }).catch(()=>{
+          ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+(offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+        });
         grid.appendChild(card);
       });
     } catch (_) {
