@@ -36,10 +36,23 @@
       #gamesOfferwall .ow-actions{display:flex;gap:8px;align-items:center}
       #gamesOfferwall .ow-actions .btn{flex:1}
       #gamesOfferwall .ow-card:hover{transform:translateY(-2px);transition:transform .15s ease,border-color .15s ease;border-color:#7040b3}
+      #gamesOfferwall .ow-filters{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+      #gamesOfferwall .ow-filter{border:1px solid #304455;background:#0b1520;color:#cbd5df;border-radius:999px;padding:7px 11px;font-size:12px;font-weight:850;cursor:pointer}
+      #gamesOfferwall .ow-filter.active{border-color:#8f4cff;background:#24123b;color:#fff}
+      #gamesOfferwall .ow-platform-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid #314657;border-radius:999px;padding:4px 7px;font-size:10px;font-weight:900;color:#b7c4cf;width:max-content}
+      #gamesOfferwall .ow-active-wrap{margin:0 0 18px;padding:14px;border:1px solid #5d2f92;border-radius:14px;background:linear-gradient(180deg,#130c1d,#0b1118)}
+      #gamesOfferwall .ow-active-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+      #gamesOfferwall .ow-active-title{font-size:17px;font-weight:950}
+      #gamesOfferwall .ow-active-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+      #gamesOfferwall .ow-active-card{border:1px solid #314557;border-radius:12px;padding:12px;background:#09121b;display:flex;flex-direction:column;gap:8px}
+      #gamesOfferwall .ow-progress{font-size:12px;color:#a8b4bf}
+      #gamesOfferwall .ow-progress strong{color:#63e6a3}
+      #gamesOfferwall .ow-empty{font-size:12px;color:#94a1ad}
       @media(max-width:700px){
         #gamesOfferwall.section{padding:12px}
         #gamesOfferwall .ow-title{font-size:18px}
         #gamesOfferwall .ow-native-grid{grid-template-columns:1fr;gap:10px}
+        #gamesOfferwall .ow-active-grid{grid-template-columns:1fr}
         #gamesOfferwall .ow-card{padding:12px}
       }
     `;
@@ -137,6 +150,57 @@
     return 'PC';
   }
 
+  function currentPlatform(){
+    const ua=navigator.userAgent||'';
+    if (/iPad|iPhone|iPod/i.test(ua)) return 'ios';
+    if (/Android/i.test(ua)) return 'android';
+    return 'pc';
+  }
+
+  function normalizedPlatforms(offer){
+    const values=(Array.isArray(offer?.platforms)?offer.platforms:[]).map(v=>String(v).toLowerCase());
+    const text=((offer?.name||'')+' '+(offer?.requirements||'')+' '+(offer?.category||'')).toLowerCase();
+    const set=new Set();
+    for(const v of values){
+      if(/iphone|ipad|ios|apple/.test(v)) set.add('ios');
+      if(/android/.test(v)) set.add('android');
+      if(/windows|desktop|pc|mac|linux|web/.test(v)) set.add('pc');
+    }
+    if(!set.size){
+      if(/iphone|ipad|\bios\b|app store/.test(text)) set.add('ios');
+      if(/android|google play|play store/.test(text)) set.add('android');
+      if(/windows|desktop|\bpc\b|macos|steam|browser|web/.test(text)) set.add('pc');
+    }
+    if(!set.size) set.add(currentPlatform());
+    return [...set];
+  }
+
+  function platformLabel(platforms){
+    const p=new Set(platforms);
+    const labels=[];
+    if(p.has('pc')) labels.push('🖥️ PC');
+    if(p.has('android')) labels.push('🤖 Android');
+    if(p.has('ios')) labels.push('🍎 iPhone/iPad');
+    return labels.join(' • ');
+  }
+
+  async function trackMissionStart(session, offer){
+    try{
+      await fetch('/api/offerwallgg/missions/start',{
+        method:'POST',
+        headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},
+        body:JSON.stringify({
+          offer_id:offer.id,
+          offer_name:offer.name||'Jeu rémunéré',
+          requirements:offer.requirements||'',
+          reward_display:offer.rewardFormatted||((offer.reward||0)+' RL Coins'),
+          device_label:platformLabel(normalizedPlatforms(offer)),
+          click_url:offer.clickUrl||''
+        })
+      });
+    }catch(_){}
+  }
+
   async function render(){
     removeLegacySurveys();
     ensureStyles();
@@ -157,28 +221,85 @@
     }
 
     try {
-      const res = await fetch('/api/offerwallgg/offers', {
-        headers: { authorization: 'Bearer ' + session.access_token },
-        cache: 'no-store'
-      });
+      const [res,missionsRes] = await Promise.all([
+        fetch('/api/offerwallgg/offers', {
+          headers: { authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        }),
+        fetch('/api/offerwallgg/missions', {
+          headers: { authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        })
+      ]);
       const data = await res.json();
+      const missionsData = await missionsRes.json().catch(()=>({ok:false,missions:[]}));
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Offerwall unavailable');
       const offers = Array.isArray(data.offers) ? data.offers : [];
+      const activeMissions = missionsRes.ok && missionsData?.ok && Array.isArray(missionsData.missions) ? missionsData.missions : [];
+      const offersById = new Map(offers.map(o=>[String(o.id),o]));
       if (!offers.length) {
         box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:24px;text-align:center">Aucun jeu rémunéré disponible pour ton appareil ou ton pays actuellement.</div>';
         return;
       }
-      box.innerHTML = '<div id="ow-device-note" style="margin:0 0 12px;color:#99a4b0;font-size:12px"></div><div class="ow-native-grid"></div>';
+      box.innerHTML = '<div class="ow-active-wrap"><div class="ow-active-head"><div class="ow-active-title">🚀 Missions en cours</div><div class="ow-meta">Retrouve rapidement les jeux déjà commencés</div></div><div class="ow-active-grid"></div></div><div id="ow-device-note" style="margin:0 0 10px;color:#99a4b0;font-size:12px"></div><div class="ow-filters"><button class="ow-filter active" data-platform="recommended">Pour cet appareil</button><button class="ow-filter" data-platform="all">Tous</button><button class="ow-filter" data-platform="pc">🖥️ PC</button><button class="ow-filter" data-platform="android">🤖 Android</button><button class="ow-filter" data-platform="ios">🍎 iPhone/iPad</button></div><div class="ow-native-grid"></div>';
       const note=box.querySelector('#ow-device-note');
-      note.textContent = 'Offres proposées par Offerwall.GG pour cet appareil ('+deviceLabel()+') et ta localisation.';
+      note.textContent = 'Offres recommandées pour '+deviceLabel()+' et ta localisation. Les offres d’un autre appareil restent accessibles via les filtres.';
+      const activeGrid=box.querySelector('.ow-active-grid');
+      if(!activeMissions.length){
+        activeGrid.innerHTML='<div class="ow-empty">Aucune mission en cours pour le moment. Lance un jeu et il apparaîtra ici automatiquement.</div>';
+      }else{
+        activeMissions.forEach(m=>{
+          const fresh=offersById.get(String(m.offer_id));
+          const card=document.createElement('div');
+          card.className='ow-active-card';
+          const t=document.createElement('div');
+          t.className='ow-card-title';
+          t.textContent=m.offer_name||fresh?.name||'Jeu rémunéré';
+          const p=document.createElement('div');
+          p.className='ow-progress';
+          p.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR')+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
+          const d=document.createElement('div');
+          d.className='ow-card-desc';
+          d.textContent=translateMissionFr(m.requirements||fresh?.requirements||'Continue tes objectifs pour gagner davantage de RL Coins.');
+          const b=document.createElement('button');
+          b.className='btn'; b.type='button'; b.textContent='Continuer';
+          b.addEventListener('click',async()=>{
+            const target=fresh?.clickUrl;
+            if(!target){ alert("Cette offre n'est plus disponible actuellement."); return; }
+            await trackMissionStart(session,fresh);
+            window.location.assign(target);
+          });
+          card.append(t,p,d,b);
+          activeGrid.appendChild(card);
+        });
+      }
       const grid = box.querySelector('.ow-native-grid');
+      let selectedPlatform='recommended';
+      const renderPlatformFilter=()=>{
+        const current=currentPlatform();
+        grid.querySelectorAll('.ow-card').forEach(card=>{
+          const platforms=(card.dataset.platforms||'').split(',').filter(Boolean);
+          const show=selectedPlatform==='all' || (selectedPlatform==='recommended' ? platforms.includes(current) : platforms.includes(selectedPlatform));
+          card.style.display=show?'flex':'none';
+        });
+      };
+      box.querySelectorAll('.ow-filter').forEach(btn=>btn.addEventListener('click',()=>{
+        selectedPlatform=btn.dataset.platform;
+        box.querySelectorAll('.ow-filter').forEach(x=>x.classList.toggle('active',x===btn));
+        renderPlatformFilter();
+      }));
       offers.forEach(offer => {
         const card=document.createElement('article');
         card.className='ow-card';
 
+        const platforms=normalizedPlatforms(offer);
+        card.dataset.platforms=platforms.join(',');
         const title=document.createElement('div');
         title.className='ow-card-title';
         title.textContent=offer.name || 'Jeu rémunéré';
+        const platformBadge=document.createElement('div');
+        platformBadge.className='ow-platform-badge';
+        platformBadge.textContent=platformLabel(platforms);
 
         const req=document.createElement('div');
         req.className='ow-card-desc';
@@ -206,10 +327,13 @@
         actions.className='ow-actions';
         const go=document.createElement('button');
         go.type='button'; go.className='btn'; go.textContent='Commencer';
-        go.addEventListener('click',()=>{ window.location.assign(offer.clickUrl); });
+        go.addEventListener('click',async()=>{
+          await trackMissionStart(session,offer);
+          window.location.assign(offer.clickUrl);
+        });
         actions.appendChild(go);
 
-        card.append(title,req,reward,ladder,compat,actions);
+        card.append(title,platformBadge,req,reward,ladder,compat,actions);
 
         fetch('/api/offerwallgg/offers/'+encodeURIComponent(offer.id), {
           headers:{authorization:'Bearer '+session.access_token},
@@ -244,6 +368,7 @@
         });
         grid.appendChild(card);
       });
+      renderPlatformFilter();
     } catch (_) {
       box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Les jeux rémunérés sont momentanément indisponibles. Réessaie dans quelques instants.</div></div>';
     }
