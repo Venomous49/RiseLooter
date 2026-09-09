@@ -38,7 +38,25 @@
     btn.type = 'button';
     btn.textContent = 'JEUX';
     btn.setAttribute('data-offerwallgg-nav','1');
-    btn.onclick = () => document.getElementById('gamesOfferwall')?.scrollIntoView({behavior:'smooth',block:'start'});
+    btn.onclick = async () => {
+      const session = await getSession();
+      if (!session?.access_token) {
+        if (typeof openAuth === 'function') openAuth();
+        else document.getElementById('authButton')?.click();
+        return;
+      }
+      try {
+        const res = await fetch('/api/offerwallgg/config', {
+          headers: { authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.wall_url) throw new Error('Offerwall unavailable');
+        window.open(data.wall_url, '_blank', 'noopener');
+      } catch (_) {
+        alert('Les jeux rémunérés sont momentanément indisponibles.');
+      }
+    };
     const missionsBtn = nav.querySelector('[data-nav="missions"]');
     if (missionsBtn && missionsBtn.nextSibling) nav.insertBefore(btn, missionsBtn.nextSibling);
     else nav.appendChild(btn);
@@ -113,11 +131,10 @@
       return;
     }
 
-    const current = box.querySelector('iframe');
-    if (current && current.src === wallUrl) return;
-
-    box.innerHTML = '<div class="ow-frame-wrap"><iframe title="Jeux rémunérés RiseLooter" allow="clipboard-write" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
-    box.querySelector('iframe').src = wallUrl;
+    box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:22px;text-align:center"><div style="font-weight:900;font-size:18px;margin-bottom:8px">🎮 Accéder aux jeux rémunérés</div><div style="color:#99a4b0;margin-bottom:14px">Les jeux s\'ouvrent dans une page sécurisée Offerwall.GG liée à ton compte RiseLooter.</div><button type="button" class="btn" id="offerwallggOpenGames">Ouvrir les jeux</button></div>';
+    document.getElementById('offerwallggOpenGames')?.addEventListener('click', () => {
+      window.open(wallUrl, '_blank', 'noopener');
+    });
   }
 
   if (document.readyState === 'loading') {
