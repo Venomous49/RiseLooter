@@ -573,10 +573,56 @@
         ladder.className='ow-missions';
         ladder.innerHTML='<button type="button" class="ow-missions-toggle"><span>🎯 Missions et récompenses</span><span>Voir les détails ▾</span></button><div class="ow-missions-body"><div style="font-size:12px;color:#99a4b0">Chargement des objectifs…</div></div>';
         const toggle=ladder.querySelector('.ow-missions-toggle');
-        toggle.addEventListener('click',()=>{
+        let detailsLoaded=false;
+        let detailsLoading=false;
+
+        async function loadMissionDetails(){
+          if(detailsLoaded || detailsLoading) return;
+          detailsLoading=true;
+          const body=ladder.querySelector('.ow-missions-body');
+          body.innerHTML='<div style="font-size:12px;color:#99a4b0">Chargement des objectifs…</div>';
+          try{
+            const r=await fetch('/api/offerwallgg/offers/'+encodeURIComponent(offer.id), {
+              headers:{authorization:'Bearer '+session.access_token},
+              cache:'no-store'
+            });
+            const data=await r.json().catch(()=>({}));
+            const details=data?.offer||{};
+            const goals=Array.isArray(details.goals)?details.goals:[];
+            if(!r.ok || !goals.length){
+              body.innerHTML='<div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(details.requirements||offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+              detailsLoaded=true;
+              return;
+            }
+            body.innerHTML='';
+            const toggleLabel=ladder.querySelector('.ow-missions-toggle span:last-child');
+            toggleLabel.textContent=goals.length+' objectif'+(goals.length>1?'s':'')+' ▴';
+            goals.forEach((goal,idx)=>{
+              const row=document.createElement('div');
+              row.className='ow-mission-row';
+              const left=document.createElement('div');
+              left.style.cssText='font-size:12px;line-height:1.35';
+              left.textContent=(idx+1)+'. '+translateMissionFr(goal.title||goal.description||'Objectif');
+              const right=document.createElement('div');
+              right.style.cssText='font-size:12px;font-weight:900;color:#63e6a3;white-space:nowrap';
+              right.innerHTML=(goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : ''))+'<br><span style="color:#c575ff">+'+Number(goal.xpReward||1).toLocaleString('fr-FR')+' XP</span>';
+              row.append(left,right);
+              body.appendChild(row);
+            });
+            detailsLoaded=true;
+          }catch(_){
+            body.innerHTML='<div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+          }finally{
+            detailsLoading=false;
+          }
+        }
+
+        toggle.addEventListener('click',async()=>{
           ladder.classList.toggle('open');
+          const isOpen=ladder.classList.contains('open');
           const label=toggle.querySelector('span:last-child');
-          label.textContent=ladder.classList.contains('open')?'Masquer ▴':'Voir les détails ▾';
+          label.textContent=isOpen?'Masquer ▴':'Voir les détails ▾';
+          if(isOpen) await loadMissionDetails();
         });
 
         const compat=document.createElement('div');
@@ -594,38 +640,6 @@
         actions.appendChild(go);
 
         card.append(title,platformBadge,req,reward,xpReward,ladder,compat,actions);
-
-        fetch('/api/offerwallgg/offers/'+encodeURIComponent(offer.id), {
-          headers:{authorization:'Bearer '+session.access_token},
-          cache:'no-store'
-        }).then(r=>r.json().then(data=>({ok:r.ok,data}))).then(({ok,data})=>{
-          const details=data?.offer||{};
-          const goals=Array.isArray(details.goals)?details.goals:[];
-          if(!ok || !goals.length){
-            const body=ladder.querySelector('.ow-missions-body');
-            body.innerHTML='<div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(details.requirements||offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
-            return;
-          }
-          const body=ladder.querySelector('.ow-missions-body');
-          body.innerHTML='';
-          const toggleLabel=ladder.querySelector('.ow-missions-toggle span:last-child');
-          toggleLabel.textContent=goals.length+' objectif'+(goals.length>1?'s':'')+' ▾';
-          goals.forEach((goal,idx)=>{
-            const row=document.createElement('div');
-            row.className='ow-mission-row';
-            const left=document.createElement('div');
-            left.style.cssText='font-size:12px;line-height:1.35';
-            left.textContent=(idx+1)+'. '+translateMissionFr(goal.title||goal.description||'Objectif');
-            const right=document.createElement('div');
-            right.style.cssText='font-size:12px;font-weight:900;color:#63e6a3;white-space:nowrap';
-            right.innerHTML=(goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : ''))+'<br><span style="color:#c575ff">+'+Number(goal.xpReward||1).toLocaleString('fr-FR')+' XP</span>';
-            row.append(left,right);
-            body.appendChild(row);
-          });
-        }).catch(()=>{
-          const body=ladder.querySelector('.ow-missions-body');
-          body.innerHTML='<div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
-        });
         grid.appendChild(card);
       });
       renderPlatformFilter();
@@ -640,8 +654,7 @@
     render();
   }
 
-  setTimeout(render, 1000);
-  setTimeout(render, 3000);
+  setTimeout(render, 1500);
 
   try{
     if (typeof sb !== 'undefined' && sb?.auth?.onAuthStateChange){
