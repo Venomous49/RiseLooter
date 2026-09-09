@@ -59,6 +59,18 @@
       #offerwallActiveMissions .ow-home-mission-meta strong{color:#63e6a3}
       #offerwallActiveMissions .ow-home-mission .btn{padding:7px 10px;font-size:11px}
       #offerwallActiveMissions .ow-home-empty{color:#99a4b0;font-size:12px;padding:12px 0}
+      #xpHistoryPanel .xp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+      #xpHistoryPanel .xp-title{font-size:19px;font-weight:950}
+      #xpHistoryPanel .xp-rule{font-size:11px;color:#bca5d4;border:1px solid #5a3a77;border-radius:999px;padding:5px 8px;background:#120b1a}
+      #xpHistoryPanel .xp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+      #xpHistoryPanel .xp-item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 11px;border:1px solid #243646;border-radius:10px;background:#071019}
+      #xpHistoryPanel .xp-item-title{font-size:12px;font-weight:900}
+      #xpHistoryPanel .xp-item-desc{font-size:10px;color:#94a1ad;margin-top:3px}
+      #xpHistoryPanel .xp-item-amount{font-size:14px;font-weight:950;color:#c575ff;white-space:nowrap}
+      #xpHistoryPanel .xp-item-amount.negative{color:#ff7b84}
+      #xpHistoryPanel .xp-empty{font-size:12px;color:#94a1ad}
+      .ow-xp-reward{font-size:12px;font-weight:900;color:#c575ff}
+      .streak-xp-note{margin-top:6px;color:#c575ff;font-size:12px;font-weight:900}
       @media(max-width:700px){
         #gamesOfferwall.section{padding:12px}
         #gamesOfferwall .ow-title{font-size:18px}
@@ -212,6 +224,85 @@
     }catch(_){}
   }
 
+  function ensureXpHistorySection(){
+    let section=document.getElementById('xpHistoryPanel');
+    if(section) return section;
+
+    section=document.createElement('section');
+    section.id='xpHistoryPanel';
+    section.className='panel section';
+    section.innerHTML='<div class="xp-head"><div class="xp-title">✨ Historique XP</div><div class="xp-rule">25 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class="xp-list"><div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div></div>';
+
+    const evolution=document.querySelector('#evolutionGrid')?.closest('section');
+    const active=document.getElementById('offerwallActiveMissions');
+    const row=active?.parentElement;
+    if(row?.parentElement){
+      row.insertAdjacentElement('afterend',section);
+    }else if(evolution?.parentElement){
+      evolution.parentElement.insertBefore(section,evolution);
+    }else{
+      document.querySelector('main')?.appendChild(section);
+    }
+    return section;
+  }
+
+  function formatXpHistoryDate(value){
+    try{
+      return new Date(value).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    }catch(_){ return ''; }
+  }
+
+  async function renderXpHistory(session){
+    const section=ensureXpHistorySection();
+    const list=section?.querySelector('.xp-list');
+    if(!list) return;
+    if(!session?.access_token){
+      list.innerHTML='<div class="xp-empty">Connecte-toi pour consulter ton historique XP.</div>';
+      return;
+    }
+    try{
+      const res=await fetch('/api/xp/history',{headers:{authorization:'Bearer '+session.access_token},cache:'no-store'});
+      const data=await res.json();
+      if(!res.ok || !data?.ok) throw new Error();
+      const history=Array.isArray(data.history)?data.history:[];
+      if(!history.length){
+        list.innerHTML='<div class="xp-empty">Tes prochains gains d’XP apparaîtront ici.</div>';
+        return;
+      }
+      list.innerHTML='';
+      history.slice(0,12).forEach(x=>{
+        const item=document.createElement('div');
+        item.className='xp-item';
+        const left=document.createElement('div');
+        const title=document.createElement('div');
+        title.className='xp-item-title';
+        title.textContent=x.title||'Gain d’XP';
+        const desc=document.createElement('div');
+        desc.className='xp-item-desc';
+        desc.textContent=(x.description?x.description+' • ':'')+formatXpHistoryDate(x.created_at);
+        left.append(title,desc);
+        const amount=document.createElement('div');
+        amount.className='xp-item-amount'+(Number(x.amount)<0?' negative':'');
+        amount.textContent=(Number(x.amount)>0?'+':'')+Number(x.amount).toLocaleString('fr-FR')+' XP';
+        item.append(left,amount);
+        list.appendChild(item);
+      });
+    }catch(_){
+      list.innerHTML='<div class="xp-empty">Historique XP momentanément indisponible.</div>';
+    }
+  }
+
+  function ensureStreakXpNote(){
+    const streak=document.querySelector('.streak-center');
+    if(!streak || streak.querySelector('.streak-xp-note')) return;
+    const note=document.createElement('div');
+    note.className='streak-xp-note';
+    note.textContent='✨ +15 XP à chaque connexion quotidienne';
+    const big=streak.querySelector('.streak-big');
+    if(big) big.insertAdjacentElement('afterend',note);
+    else streak.appendChild(note);
+  }
+
   function ensureActiveMissionsHomeSection(){
     let section=document.getElementById('offerwallActiveMissions');
     if(section) return section;
@@ -257,7 +348,7 @@
 
       const meta=document.createElement('div');
       meta.className='ow-home-mission-meta';
-      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR',{minimumFractionDigits:Number(m.earned_coins||0)<1?2:0,maximumFractionDigits:2})+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
+      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR',{minimumFractionDigits:Number(m.earned_coins||0)<1?2:0,maximumFractionDigits:2})+' RL Coins gagnés</strong> • <span style="color:#c575ff;font-weight:900">+'+Number(m.earned_xp||0).toLocaleString('fr-FR')+' XP</span> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
 
       left.append(name,meta);
 
@@ -300,12 +391,17 @@
     ensureNav();
     ensureSection();
     ensureActiveMissionsHomeSection();
+    ensureXpHistorySection();
+    ensureStreakXpNote();
 
     const box = document.getElementById('offerwallggContent');
     if (!box) return;
 
     const session = await getSession();
-    if(session?.user?.id) refreshExactRlBalance(session);
+    if(session?.user?.id) {
+      refreshExactRlBalance(session);
+      renderXpHistory(session);
+    }
     if (!session?.user?.id){
       box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Connecte-toi pour accéder aux jeux rémunérés.<br><button class="btn" id="offerwallggLogin">Se connecter</button></div></div>';
       document.getElementById('offerwallggLogin')?.addEventListener('click', () => {
@@ -375,6 +471,9 @@
         const reward=document.createElement('div');
         reward.className='ow-reward';
         reward.textContent=offer.rewardFormatted || ((offer.reward||0)+' RL Coins');
+        const xpReward=document.createElement('div');
+        xpReward.className='ow-xp-reward';
+        xpReward.textContent='✨ +'+Number(offer.xpReward||1).toLocaleString('fr-FR')+' XP';
 
         const ladder=document.createElement('div');
         ladder.className='ow-missions';
@@ -400,7 +499,7 @@
         });
         actions.appendChild(go);
 
-        card.append(title,platformBadge,req,reward,ladder,compat,actions);
+        card.append(title,platformBadge,req,reward,xpReward,ladder,compat,actions);
 
         fetch('/api/offerwallgg/offers/'+encodeURIComponent(offer.id), {
           headers:{authorization:'Bearer '+session.access_token},
@@ -425,7 +524,7 @@
             left.textContent=(idx+1)+'. '+translateMissionFr(goal.title||goal.description||'Objectif');
             const right=document.createElement('div');
             right.style.cssText='font-size:12px;font-weight:900;color:#63e6a3;white-space:nowrap';
-            right.textContent=goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : '');
+            right.innerHTML=(goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : ''))+'<br><span style="color:#c575ff">+'+Number(goal.xpReward||1).toLocaleString('fr-FR')+' XP</span>';
             row.append(left,right);
             body.appendChild(row);
           });
