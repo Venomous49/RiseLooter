@@ -48,6 +48,17 @@
       #gamesOfferwall .ow-progress{font-size:12px;color:#a8b4bf}
       #gamesOfferwall .ow-progress strong{color:#63e6a3}
       #gamesOfferwall .ow-empty{font-size:12px;color:#94a1ad}
+      #offerwallActiveMissions{min-height:100%;display:flex;flex-direction:column}
+      #offerwallActiveMissions .ow-home-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+      #offerwallActiveMissions .ow-home-title{font-size:20px;font-weight:950}
+      #offerwallActiveMissions .ow-home-count{font-size:11px;font-weight:900;color:#d7b0ff;border:1px solid #6f3cb4;border-radius:999px;padding:5px 8px;background:#171020}
+      #offerwallActiveMissions .ow-home-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;max-height:220px;overflow:auto}
+      #offerwallActiveMissions .ow-home-mission{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px;border:1px solid #263848;border-radius:10px;background:#071019}
+      #offerwallActiveMissions .ow-home-mission-name{font-weight:900;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      #offerwallActiveMissions .ow-home-mission-meta{font-size:11px;color:#99a4b0;margin-top:3px}
+      #offerwallActiveMissions .ow-home-mission-meta strong{color:#63e6a3}
+      #offerwallActiveMissions .ow-home-mission .btn{padding:7px 10px;font-size:11px}
+      #offerwallActiveMissions .ow-home-empty{color:#99a4b0;font-size:12px;padding:12px 0}
       @media(max-width:700px){
         #gamesOfferwall.section{padding:12px}
         #gamesOfferwall .ow-title{font-size:18px}
@@ -201,11 +212,77 @@
     }catch(_){}
   }
 
+  function ensureActiveMissionsHomeSection(){
+    let section=document.getElementById('offerwallActiveMissions');
+    if(section) return section;
+
+    section=document.createElement('section');
+    section.id='offerwallActiveMissions';
+    section.className='panel section';
+    section.innerHTML='<div class="ow-home-head"><div class="ow-home-title">🚀 Missions en cours</div><div class="ow-home-count">0 en cours</div></div><div class="section-subtitle">Retrouve ici les jeux déjà commencés et continue directement tes objectifs.</div><div class="ow-home-list"><div class="ow-home-empty">Aucune mission en cours pour le moment.</div></div>';
+
+    const streak=document.querySelector('.streak-center');
+    const row=streak?.parentElement;
+    if(row && row.classList.contains('two-cols')){
+      row.appendChild(section);
+    }else{
+      const home=document.getElementById('home');
+      home?.insertAdjacentElement('afterend',section);
+    }
+    return section;
+  }
+
+  function renderActiveMissionsHome(session, activeMissions, offersById){
+    const section=ensureActiveMissionsHomeSection();
+    if(!section) return;
+    const list=section.querySelector('.ow-home-list');
+    const count=section.querySelector('.ow-home-count');
+    count.textContent=(activeMissions?.length||0)+' en cours';
+
+    if(!activeMissions?.length){
+      list.innerHTML='<div class="ow-home-empty">Aucune mission en cours pour le moment. Lance un jeu depuis la rubrique Jeux et il apparaîtra ici automatiquement.</div>';
+      return;
+    }
+
+    list.innerHTML='';
+    activeMissions.forEach(m=>{
+      const fresh=offersById.get(String(m.offer_id));
+      const item=document.createElement('div');
+      item.className='ow-home-mission';
+
+      const left=document.createElement('div');
+      const name=document.createElement('div');
+      name.className='ow-home-mission-name';
+      name.textContent=m.offer_name||fresh?.name||'Jeu rémunéré';
+
+      const meta=document.createElement('div');
+      meta.className='ow-home-mission-meta';
+      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR')+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
+
+      left.append(name,meta);
+
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='btn';
+      btn.textContent='Continuer';
+      btn.addEventListener('click',async()=>{
+        const target=fresh?.clickUrl;
+        if(!target){ alert("Cette offre n'est plus disponible actuellement."); return; }
+        await trackMissionStart(session,fresh);
+        window.location.assign(target);
+      });
+
+      item.append(left,btn);
+      list.appendChild(item);
+    });
+  }
+
   async function render(){
     removeLegacySurveys();
     ensureStyles();
     ensureNav();
     ensureSection();
+    ensureActiveMissionsHomeSection();
 
     const box = document.getElementById('offerwallggContent');
     if (!box) return;
@@ -241,38 +318,10 @@
         box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:24px;text-align:center">Aucun jeu rémunéré disponible pour ton appareil ou ton pays actuellement.</div>';
         return;
       }
-      box.innerHTML = '<div class="ow-active-wrap"><div class="ow-active-head"><div class="ow-active-title">🚀 Missions en cours</div><div class="ow-meta">Retrouve rapidement les jeux déjà commencés</div></div><div class="ow-active-grid"></div></div><div id="ow-device-note" style="margin:0 0 10px;color:#99a4b0;font-size:12px"></div><div class="ow-filters"><button class="ow-filter active" data-platform="recommended">Pour cet appareil</button><button class="ow-filter" data-platform="all">Tous</button><button class="ow-filter" data-platform="pc">🖥️ PC</button><button class="ow-filter" data-platform="android">🤖 Android</button><button class="ow-filter" data-platform="ios">🍎 iPhone/iPad</button></div><div class="ow-native-grid"></div>';
+      box.innerHTML = '<div id="ow-device-note" style="margin:0 0 10px;color:#99a4b0;font-size:12px"></div><div class="ow-filters"><button class="ow-filter active" data-platform="recommended">Pour cet appareil</button><button class="ow-filter" data-platform="all">Tous</button><button class="ow-filter" data-platform="pc">🖥️ PC</button><button class="ow-filter" data-platform="android">🤖 Android</button><button class="ow-filter" data-platform="ios">🍎 iPhone/iPad</button></div><div class="ow-native-grid"></div>';
       const note=box.querySelector('#ow-device-note');
       note.textContent = 'Offres recommandées pour '+deviceLabel()+' et ta localisation. Les offres d’un autre appareil restent accessibles via les filtres.';
-      const activeGrid=box.querySelector('.ow-active-grid');
-      if(!activeMissions.length){
-        activeGrid.innerHTML='<div class="ow-empty">Aucune mission en cours pour le moment. Lance un jeu et il apparaîtra ici automatiquement.</div>';
-      }else{
-        activeMissions.forEach(m=>{
-          const fresh=offersById.get(String(m.offer_id));
-          const card=document.createElement('div');
-          card.className='ow-active-card';
-          const t=document.createElement('div');
-          t.className='ow-card-title';
-          t.textContent=m.offer_name||fresh?.name||'Jeu rémunéré';
-          const p=document.createElement('div');
-          p.className='ow-progress';
-          p.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR')+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
-          const d=document.createElement('div');
-          d.className='ow-card-desc';
-          d.textContent=translateMissionFr(m.requirements||fresh?.requirements||'Continue tes objectifs pour gagner davantage de RL Coins.');
-          const b=document.createElement('button');
-          b.className='btn'; b.type='button'; b.textContent='Continuer';
-          b.addEventListener('click',async()=>{
-            const target=fresh?.clickUrl;
-            if(!target){ alert("Cette offre n'est plus disponible actuellement."); return; }
-            await trackMissionStart(session,fresh);
-            window.location.assign(target);
-          });
-          card.append(t,p,d,b);
-          activeGrid.appendChild(card);
-        });
-      }
+      renderActiveMissionsHome(session,activeMissions,offersById);
       const grid = box.querySelector('.ow-native-grid');
       let selectedPlatform='recommended';
       const renderPlatformFilter=()=>{
