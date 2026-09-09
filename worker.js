@@ -184,6 +184,35 @@ async function hmacSha256Hex(secret, message) {
   return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
+function offerwallUserCoinRate(env) {
+  const userShare = Number(env.OFFERWALL_USER_SHARE || 0.70);
+  const eurPerUsd = Number(env.OFFERWALL_EUR_PER_USD || env.CPX_EUR_PER_USD || 0.92);
+  if (!Number.isFinite(userShare) || userShare <= 0 || userShare >= 1) return 64.4;
+  if (!Number.isFinite(eurPerUsd) || eurPerUsd <= 0) return userShare * 0.92 * 100;
+  return userShare * eurPerUsd * 100;
+}
+
+function offerwallExactUserCoins(rawReward, payoutUsd, providerPerUsd, env) {
+  let grossUsd = Number(payoutUsd);
+  if (!Number.isFinite(grossUsd) || grossUsd < 0) grossUsd = NaN;
+  if (!Number.isFinite(grossUsd)) {
+    const reward = Number(rawReward);
+    const perUsd = Number(providerPerUsd);
+    if (Number.isFinite(reward) && reward >= 0 && Number.isFinite(perUsd) && perUsd > 0) {
+      grossUsd = reward / perUsd;
+    } else {
+      grossUsd = 0;
+    }
+  }
+  return Math.max(0, grossUsd * offerwallUserCoinRate(env));
+}
+
+function formatRlCoins(value) {
+  const n = Number(value || 0);
+  const digits = n < 10 ? 2 : n < 100 ? 1 : 0;
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: digits }) + ' RL Coins';
+}
+
 async function handleOfferwallGgConfig(request, env) {
   if (!env.OFFERWALL_GG_SECRET) return json({ ok:false, error:'Offerwall.GG not configured' },503);
   const guard = await requireUser(request, env);
@@ -233,23 +262,28 @@ async function handleOfferwallGgOffers(request, env) {
     const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok || data?.success === false) return json({ ok:false, error:'Offerwall.GG inventory unavailable' },502);
     const offers = Array.isArray(data?.data?.offers) ? data.data.offers : [];
+    const providerCurrency = data?.data?.currency || null;
+    const providerPerUsd = Number(providerCurrency?.perUsd || 0);
     return json({
       ok:true,
-      offers: offers.map(o => ({
-        id:o.id,
-        name:o.name || 'Jeu rémunéré',
-        requirements:o.requirements || '',
-        reward:o.reward,
-        rewardFormatted:o.rewardFormatted || '',
-        rewardIsVariable:Boolean(o.rewardIsVariable),
-        clickUrl:o.clickUrl || '',
-        platforms: Array.isArray(o.platforms) ? o.platforms
-          : Array.isArray(o.devices) ? o.devices
-          : Array.isArray(o.deviceTypes) ? o.deviceTypes
-          : (o.platform ? [o.platform] : o.os ? [o.os] : []),
-        category: o.category || o.type || ''
-      })).filter(o => o.clickUrl),
-      currency:data?.data?.currency || null
+      offers: offers.map(o => {
+        const userReward = offerwallExactUserCoins(o.reward, o.payoutUsd, providerPerUsd, env);
+        return {
+          id:o.id,
+          name:o.name || 'Jeu rémunéré',
+          requirements:o.requirements || '',
+          reward:Number(userReward.toFixed(6)),
+          rewardFormatted:formatRlCoins(userReward),
+          rewardIsVariable:Boolean(o.rewardIsVariable),
+          clickUrl:o.clickUrl || '',
+          platforms: Array.isArray(o.platforms) ? o.platforms
+            : Array.isArray(o.devices) ? o.devices
+            : Array.isArray(o.deviceTypes) ? o.deviceTypes
+            : (o.platform ? [o.platform] : o.os ? [o.os] : []),
+          category: o.category || o.type || ''
+        };
+      }).filter(o => o.clickUrl),
+      currency:{ name:'RL Coins', perUsd:offerwallUserCoinRate(env) }
     });
   } catch (_) {
     return json({ ok:false, error:'Offerwall.GG inventory unavailable' },502);
@@ -288,13 +322,19 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
       : Array.isArray(root?.steps) ? root.steps
       : [];
 
-    const goals = rawGoals.map((g, index) => ({
-      id: g?.id ?? index,
-      title: g?.name || g?.title || g?.goal || g?.description || ('Étape ' + (index + 1)),
-      description: g?.description || g?.requirements || g?.requirement || '',
-      reward: g?.reward ?? g?.currencyAmount ?? g?.amount ?? null,
-      rewardFormatted: g?.rewardFormatted || g?.currencyAmountFormatted || g?.amountFormatted || ''
-    }));
+    const detailCurrency = data?.data?.currency || data?.currency || root?.currency || null;
+    const providerPerUsd = Number(detailCurrency?.perUsd || 0);
+    const goals = rawGoals.map((g, index) => {
+      const rawReward = g?.reward ?? g?.currencyAmount ?? g?.amount ?? 0;
+      const exactReward = offerwallExactUserCoins(rawReward, g?.payoutUsd ?? g?.payout, providerPerUsd, env);
+      return {
+        id: g?.id ?? index,
+        title: g?.name || g?.title || g?.goal || g?.description || ('Étape ' + (index + 1)),
+        description: g?.description || g?.requirements || g?.requirement || '',
+        reward: Number(exactReward.toFixed(6)),
+        rewardFormatted: formatRlCoins(exactReward)
+      };
+    });
 
     return json({
       ok:true,
@@ -302,8 +342,8 @@ async function handleOfferwallGgOfferDetail(request, env, offerId) {
         id: root?.id || offerId,
         name: root?.name || root?.title || 'Jeu rémunéré',
         requirements: root?.requirements || root?.description || '',
-        reward: root?.reward ?? null,
-        rewardFormatted: root?.rewardFormatted || '',
+        reward: Number(offerwallExactUserCoins(root?.reward ?? 0, root?.payoutUsd ?? root?.payout, providerPerUsd, env).toFixed(6)),
+        rewardFormatted: formatRlCoins(offerwallExactUserCoins(root?.reward ?? 0, root?.payoutUsd ?? root?.payout, providerPerUsd, env)),
         goals
       }
     });
@@ -402,22 +442,22 @@ async function handleOfferwallGgPostback(request, env) {
   if (!timingSafeEqual(signature, expected)) return new Response('FORBIDDEN', { status:403 });
   if (test) return new Response('OK', { status:200 });
 
-  // Placement currency is RL Coins (100 coins = €1). Offerwall.GG sends currencyAmount
-  // already expressed in that configured virtual currency, so never apply the CPX 70/30 split again.
-  const rewardCoins = Math.max(0, Math.trunc(Math.abs(amount)));
+  // Reward users from the real publisher payout, never from Offerwall.GG's placement
+  // currencyAmount. This guarantees RiseLooter keeps its intended 70/30 economics even
+  // if the placement exchange-rate field is misconfigured.
   const providerStatus = statusRaw === 'credited' ? '1' : '2';
   const grossUsd = Number.isFinite(payoutUsd) ? Math.abs(payoutUsd) : 0;
+  const exactRewardCoins = offerwallExactUserCoins(0, grossUsd, 0, env);
 
   const payload = {
-    p_provider: 'offerwallgg',
     p_transaction_id: txId,
     p_user_id: userId,
     p_offer_id: offerId,
     p_status: providerStatus,
     p_amount_usd: grossUsd,
-    p_reward_coins: rewardCoins
+    p_reward_coins_exact: Number(exactRewardCoins.toFixed(6))
   };
-  const res = await supabase(env, 'rpc/apply_offerwall_reward', { method:'POST', body:JSON.stringify(payload) });
+  const res = await supabase(env, 'rpc/apply_offerwall_reward_v2', { method:'POST', body:JSON.stringify(payload) });
   if (!res.ok) return new Response('RETRY', { status:500 });
   if (providerStatus === '1' && offerId) {
     await supabase(env, 'offerwall_active_missions?user_id=eq.' + encodeURIComponent(userId) + '&offer_id=eq.' + encodeURIComponent(offerId), {
