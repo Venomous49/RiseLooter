@@ -257,7 +257,7 @@
 
       const meta=document.createElement('div');
       meta.className='ow-home-mission-meta';
-      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR')+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
+      meta.innerHTML='<strong>'+Number(m.earned_coins||0).toLocaleString('fr-FR',{minimumFractionDigits:Number(m.earned_coins||0)<1?2:0,maximumFractionDigits:2})+' RL Coins gagnés</strong> • '+Number(m.completed_steps||0)+' mission'+(Number(m.completed_steps||0)>1?'s':'')+' validée'+(Number(m.completed_steps||0)>1?'s':'');
 
       left.append(name,meta);
 
@@ -277,6 +277,23 @@
     });
   }
 
+  async function refreshExactRlBalance(session){
+    if(!session?.access_token) return;
+    try{
+      const res=await fetch('/api/offerwallgg/balance',{
+        headers:{authorization:'Bearer '+session.access_token},
+        cache:'no-store'
+      });
+      const data=await res.json();
+      if(!res.ok || !data?.ok) return;
+      const el=document.getElementById('headerCoins');
+      if(el){
+        const n=Number(data.exact_coins||0);
+        el.textContent=n.toLocaleString('fr-FR',{minimumFractionDigits:n<1?2:0,maximumFractionDigits:2});
+      }
+    }catch(_){}
+  }
+
   async function render(){
     removeLegacySurveys();
     ensureStyles();
@@ -288,6 +305,7 @@
     if (!box) return;
 
     const session = await getSession();
+    if(session?.user?.id) refreshExactRlBalance(session);
     if (!session?.user?.id){
       box.innerHTML = '<div class="ow-frame-wrap"><div class="ow-login">Connecte-toi pour accéder aux jeux rémunérés.<br><button class="btn" id="offerwallggLogin">Se connecter</button></div></div>';
       document.getElementById('offerwallggLogin')?.addEventListener('click', () => {
