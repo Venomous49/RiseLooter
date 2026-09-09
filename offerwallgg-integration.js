@@ -80,27 +80,11 @@
     return null;
   }
 
-  function currentDevice(){
-    const ua = navigator.userAgent || '';
-    if (/iPad|iPhone|iPod/i.test(ua)) return 'ios';
-    if (/Android/i.test(ua)) return 'android';
-    if (/Windows|Macintosh|Linux/i.test(ua)) return 'desktop';
-    return 'other';
-  }
-
-  function offerCompatibility(offer){
-    const hay = ((offer.name||'')+' '+(offer.requirements||'')).toLowerCase();
-    const device = currentDevice();
-    const ios = /\biphone\b|\bipad\b|\bios\b|app store/.test(hay);
-    const android = /\bandroid\b|google play|play store/.test(hay);
-    const desktop = /\bwindows\b|\bmac\b|\bmacos\b|\bdesktop\b|\bpc\b/.test(hay);
-
-    if (device === 'ios' && android && !ios) return {ok:false,label:'Android uniquement'};
-    if (device === 'android' && ios && !android) return {ok:false,label:'iPhone/iPad uniquement'};
-    if (device === 'desktop' && (ios || android) && !desktop) {
-      return {ok:false,label: ios && !android ? 'iPhone/iPad uniquement' : android && !ios ? 'Android uniquement' : 'Mobile uniquement'};
-    }
-    return {ok:true,label: device==='desktop' ? 'Compatible PC' : device==='android' ? 'Compatible Android' : device==='ios' ? 'Compatible iPhone/iPad' : 'Compatible'};
+  function deviceLabel(){
+    const ua=navigator.userAgent||'';
+    if (/iPad|iPhone|iPod/i.test(ua)) return 'iPhone / iPad';
+    if (/Android/i.test(ua)) return 'Android';
+    return 'PC';
   }
 
   async function render(){
@@ -129,18 +113,14 @@
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Offerwall unavailable');
-      const allOffers = Array.isArray(data.offers) ? data.offers : [];
-      const offers = allOffers
-        .map(offer => ({...offer,_compat:offerCompatibility(offer)}))
-        .sort((a,b) => Number(b._compat.ok) - Number(a._compat.ok));
-      const compatibleCount = offers.filter(o => o._compat.ok).length;
+      const offers = Array.isArray(data.offers) ? data.offers : [];
       if (!offers.length) {
         box.innerHTML = '<div class="ow-frame-wrap" style="min-height:0;padding:24px;text-align:center">Aucun jeu rémunéré disponible pour ton appareil ou ton pays actuellement.</div>';
         return;
       }
       box.innerHTML = '<div id="ow-device-note" style="margin:0 0 12px;color:#99a4b0;font-size:12px"></div><div class="ow-native-grid"></div>';
       const note=box.querySelector('#ow-device-note');
-      note.textContent = compatibleCount ? (compatibleCount+' offre(s) compatible(s) détectée(s) avec cet appareil.') : 'Aucune offre clairement compatible détectée avec cet appareil pour le moment.';
+      note.textContent = 'Offres proposées par Offerwall.GG pour cet appareil ('+deviceLabel()+') et ta localisation.';
       const grid = box.querySelector('.ow-native-grid');
       grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px';
       offers.forEach(offer => {
@@ -157,12 +137,10 @@
         reward.textContent=offer.rewardFormatted || ((offer.reward||0)+' RL Coins');
         const compat=document.createElement('div');
         compat.style.cssText='font-size:11px;font-weight:800;opacity:.9';
-        compat.textContent=offer._compat.label;
+        compat.textContent='✓ Sélectionnée pour '+deviceLabel();
         const go=document.createElement('button');
-        go.type='button'; go.className='btn'; go.textContent=offer._compat.ok?'Jouer':'Appareil non compatible';
-        go.disabled=!offer._compat.ok;
-        if(!offer._compat.ok){ go.style.opacity='.55'; go.style.cursor='not-allowed'; }
-        else go.addEventListener('click',()=>{ window.location.href=offer.clickUrl; });
+        go.type='button'; go.className='btn'; go.textContent='Commencer';
+        go.addEventListener('click',()=>{ window.location.assign(offer.clickUrl); });
         card.append(title,req,reward,compat,go);
         grid.appendChild(card);
       });
