@@ -158,7 +158,7 @@
           const details=data?.offer||{};
           const goals=Array.isArray(details.goals)?details.goals:[];
           if(!ok || !goals.length){
-            ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+(details.requirements||offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
+            ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Mission à effectuer</div><div style="font-size:12px;color:#c8d0d8">'+translateMissionFr(details.requirements||offer.requirements||'Suis les objectifs indiqués après avoir lancé le jeu.')+'</div>';
             return;
           }
           ladder.innerHTML='<div style="font-size:12px;font-weight:900">🎯 Missions et récompenses</div>';
@@ -167,7 +167,7 @@
             row.style.cssText='display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding-top:7px;border-top:1px solid #1c2c38';
             const left=document.createElement('div');
             left.style.cssText='font-size:12px;line-height:1.35';
-            left.textContent=(idx+1)+'. '+(goal.title||goal.description||'Objectif');
+            left.textContent=(idx+1)+'. '+translateMissionFr(goal.title||goal.description||'Objectif');
             const right=document.createElement('div');
             right.style.cssText='font-size:12px;font-weight:900;color:#63e6a3;white-space:nowrap';
             right.textContent=goal.rewardFormatted || (goal.reward!=null ? ('+'+Number(goal.reward).toLocaleString('fr-FR')+' RL Coins') : '');
