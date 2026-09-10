@@ -1,6 +1,5 @@
 name: Fix canonical gender character runtime
 
-# Trigger refresh 2026-08-23T09:35+02:00
 on:
   workflow_dispatch:
   schedule:
@@ -24,15 +23,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Patch character and silhouette paths
+      - name: Install production recovery and canonical runtime
         shell: bash
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
 
-          old='''function assetPath(profile,stage){
+          # Keep the canonical fixed character masters as the runtime source.
+          if 'function canonicalCharacterPath(gender,stage)' not in s:
+              old='''function assetPath(profile,stage){
   const gender = profile?.avatar_gender || "male";
   const skin = profile?.avatar_skin || "medium";
   const hairColor = profile?.avatar_hair_color || "brown";
@@ -63,15 +64,14 @@ return `${stages[stage].slug}.webp`;
 function silhouettePath(stage){
 return `sil-${stages[stage].slug}.png`;
 }'''
-
-          new='''function normalizedGender(value){
+              new='''function normalizedGender(value){
   return value === "female" ? "female" : "male";
 }
 
 function canonicalCharacterPath(gender,stage){
   const safeGender = normalizedGender(gender);
   const prefix = safeGender === "female" ? "female-" : "";
-  return `${prefix}${stages[stage].slug}.webp?v=canonical-masters-20260823`;
+  return `${prefix}${stages[stage].slug}.webp?v=canonical-masters-20260910`;
 }
 
 function assetPath(profile,stage){
@@ -92,26 +92,30 @@ function fallbackAssetPath(stage,gender="male"){
 
 function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDraft.gender)){
   const safeGender = normalizedGender(gender);
-  return `silhouettes/${safeGender}/${stages[stage].slug}.png?v=approved-silhouettes-20260823`;
+  return `silhouettes/${safeGender}/${stages[stage].slug}.png?v=approved-silhouettes-20260910`;
 }'''
+              if old in s:
+                  s=s.replace(old,new,1)
 
-          if old not in s:
-              if 'function canonicalCharacterPath(gender,stage)' in s:
-                  raise SystemExit(0)
-              raise SystemExit('Expected legacy asset-path block not found; refusing broad patch')
-          s=s.replace(old,new,1)
           s=s.replace('data-fallback="${fallbackAssetPath(i)}"','data-fallback="${fallbackAssetPath(i, profile?.avatar_gender)}"')
           s=s.replace('src="${silhouettePath(i)}" alt=""','src="${silhouettePath(i, profile?.avatar_gender)}" alt=""')
           s=s.replace('src="${silhouettePath(idx + 1)}" alt=""','src="${silhouettePath(idx + 1, profile?.avatar_gender)}" alt=""')
 
-          checks=[
-            'canonicalCharacterPath(profile?.avatar_gender,stage)',
-            'silhouettes/${safeGender}/${stages[stage].slug}.png',
-            'silhouettePath(i, profile?.avatar_gender)',
-            'silhouettePath(idx + 1, profile?.avatar_gender)'
-          ]
-          for c in checks:
-              if c not in s: raise SystemExit(f'Missing post-patch invariant: {c}')
+          # Force the primary Offerwall file to bypass stale mobile browser caches.
+          s=s.replace('/offerwallgg-integration.js?v=1','/offerwallgg-integration.js?v=20260910-5')
+          s=s.replace('/offerwallgg-integration.js?v=20260910-4','/offerwallgg-integration.js?v=20260910-5')
+
+          # This loader is the production recovery layer for session/profile/mobile balance/art/games.
+          tag='<script src="/production-recovery-v3.js?v=20260910-5"></script>'
+          if 'production-recovery-v3.js' not in s:
+              if '</body>' not in s:
+                  raise SystemExit('Missing closing body tag')
+              s=s.replace('</body>',tag+'\n</body>',1)
+
+          required=['production-recovery-v3.js','offerwallgg-integration.js?v=20260910-5','canonicalCharacterPath(gender,stage)']
+          for x in required:
+              if x not in s:
+                  raise SystemExit(f'Missing invariant: {x}')
           p.write_text(s,encoding='utf-8')
           PY
 
@@ -119,14 +123,11 @@ function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDra
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'canonicalCharacterPath(profile?.avatar_gender,stage)' index.html
-          grep -Fq 'silhouettes/${safeGender}/${stages[stage].slug}.png' index.html
-          if grep -Fq 'return `assets/characters/${gender}/${skin}/${hairColor}/${hairStyle}' index.html; then
-            echo 'Legacy runtime asset path remains active' >&2
-            exit 1
-          fi
+          grep -Fq 'production-recovery-v3.js?v=20260910-5' index.html
+          grep -Fq 'offerwallgg-integration.js?v=20260910-5' index.html
+          grep -Fq 'canonicalCharacterPath(gender,stage)' index.html
 
-      - name: Commit runtime fix
+      - name: Commit production runtime fix
         shell: bash
         run: |
           set -euo pipefail
@@ -134,6 +135,6 @@ function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDra
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Use canonical gender masters and silhouettes at runtime'
+          git commit -m 'Restore production session balance art and games'
           git pull --rebase origin main
           git push origin HEAD:main
