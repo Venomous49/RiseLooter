@@ -25,11 +25,15 @@ jobs:
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
-          old='''<script src="/offerwallgg-integration.js?v=20260910-v5"></script>\n<script src="/production-recovery-v3.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v4.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v5.js?v=20260910-v5"></script>'''
+          old='''<script src="/offerwallgg-integration.js?v=20260910-v5"></script>\n<script src="/production-recovery-v3.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v5.js?v=20260910-v5"></script>'''
+          old4='''<script src="/offerwallgg-integration.js?v=20260910-v5"></script>\n<script src="/production-recovery-v3.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v4.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v5.js?v=20260910-v5"></script>'''
           new='''<script src="/offerwallgg-integration.js?v=20260910-stable-v6"></script>\n<script src="/production-recovery-v3.js?v=20260910-stable-v6"></script>'''
-          if old not in s:
-              raise SystemExit('Expected old runtime chain not found; refusing unsafe patch')
-          s=s.replace(old,new,1)
+          if old4 in s:
+              s=s.replace(old4,new,1)
+          elif old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit('Expected runtime chain not found; refusing unsafe patch')
           p.write_text(s,encoding='utf-8')
           PY
           grep -q 'offerwallgg-integration.js?v=20260910-stable-v6' index.html
