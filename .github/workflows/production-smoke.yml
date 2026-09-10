@@ -49,7 +49,7 @@ jobs:
             const page=await browser.newPage({viewport:{width,height}});
             const errors=[];
             page.on('pageerror',e=>errors.push(String(e)));
-            await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
             await page.waitForTimeout(4000);
             const result=await page.evaluate(()=>{
               const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0};
@@ -76,3 +76,4 @@ jobs:
           if(failed)process.exit(1);
           JS
           cd /tmp && node smoke.mjs
+          # Audit run after Cloudflare production version b0a41f29-c9d8-44d4-ac6b-b039ee99d27a.
