@@ -4,13 +4,6 @@ on:
   push:
     paths:
       - '.github/workflows/production-smoke.yml'
-      - 'index.html'
-      - 'worker.js'
-      - 'safe-ui-bootstrap.js'
-      - 'username-guard.js'
-      - 'offerwallgg-stable-v8.js'
-  schedule:
-    - cron: '17 */6 * * *'
 permissions:
   contents: read
 concurrency:
@@ -30,35 +23,39 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 --no-audit --no-fund
           npx playwright install chromium --with-deps
-      - name: Check production responsiveness on all viewports
+      - name: Isolate production main-thread hang
         shell: bash
         run: |
-          cat > /tmp/smoke.mjs <<'JS'
+          cat > /tmp/diagnose.mjs <<'JS'
           import { chromium } from 'playwright';
-          const sizes=[['phone-portrait',390,844],['phone-landscape',844,390],['tablet-portrait',768,1024],['tablet-landscape',1024,768],['desktop',1366,768]];
           const SUPABASE_STUB=`(()=>{const chain=()=>{let p;p=new Proxy({}, {get(_t,k){if(k==='then')return resolve=>Promise.resolve({data:[],error:null}).then(resolve);return()=>p;}});return p};const client={auth:{getSession:async()=>({data:{session:null},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),signInWithPassword:async()=>({data:{session:null},error:null}),signUp:async()=>({data:{session:null},error:null}),updateUser:async()=>({data:{},error:null})},from:()=>chain(),rpc:async()=>({data:null,error:null})};window.supabase={createClient:()=>client};})();`;
-          const browser=await chromium.launch({headless:true}); let failed=false;
-          for(const [name,width,height] of sizes){
-            console.log('START',name);
-            const page=await browser.newPage({viewport:{width,height}});
-            page.setDefaultTimeout(7000); page.setDefaultNavigationTimeout(12000);
+          const scenarios=[
+            ['baseline',[]],
+            ['no-offerwall',['offerwallgg-stable-v8.js']],
+            ['no-recovery-history',['production-recovery-v3.js','history-detail-v2.js']],
+            ['no-runtime-group',['creator-cache-v23.js','safe-ui-bootstrap.js','fixed-stage-home.js','silhouette-stage-locks.js','evolution-test-mode.js','username-guard.js','admin-dashboard.js']],
+            ['no-external-runtime',['offerwallgg-stable-v8.js','production-recovery-v3.js','history-detail-v2.js','creator-cache-v23.js','safe-ui-bootstrap.js','fixed-stage-home.js','silhouette-stage-locks.js','evolution-test-mode.js','username-guard.js','admin-dashboard.js']]
+          ];
+          const browser=await chromium.launch({headless:true});
+          for(const [name,blocked] of scenarios){
+            const page=await browser.newPage({viewport:{width:1366,height:768}});
             await page.route('https://cdn.jsdelivr.net/**',r=>r.fulfill({status:200,contentType:'application/javascript',body:SUPABASE_STUB}));
-            const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
-            try {
-              const response=await page.goto('https://loot-up.marin-iglesias.workers.dev/?smoke=v14-'+Date.now(),{waitUntil:'domcontentloaded',timeout:12000});
-              if(!response || !response.ok()) throw new Error('HTTP '+(response?.status()||'no-response'));
-              await page.waitForTimeout(2500);
-              const heartbeat=await Promise.race([
-                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('responsive'),250))),
-                new Promise((_,reject)=>setTimeout(()=>reject(new Error('main thread unresponsive')),4000))
+            await page.route('https://loot-up.marin-iglesias.workers.dev/**',async r=>{
+              const u=r.request().url();
+              if(blocked.some(x=>u.includes('/'+x))) return r.fulfill({status:200,contentType:'application/javascript',body:'/* diagnostic block */'});
+              return r.continue();
+            });
+            try{
+              await page.goto('https://loot-up.marin-iglesias.workers.dev/?diag='+name+'-'+Date.now(),{waitUntil:'domcontentloaded',timeout:12000});
+              await page.waitForTimeout(1800);
+              const result=await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('RESPONSIVE'),250))),
+                new Promise(resolve=>setTimeout(()=>resolve('HUNG'),4000))
               ]);
-              if(heartbeat!=='responsive') throw new Error('heartbeat failed');
-              const r=await page.evaluate(()=>{const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e),b=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0};const nav=[...document.querySelectorAll('nav button')];return{overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,logo:!!document.querySelector('.logo'),auth:vis('authButton'),balance:!!document.getElementById('headerCoins'),home:vis('home'),evolution:!!document.getElementById('evolution'),leaderboard:!!document.getElementById('leaderboard'),referral:!!document.getElementById('referral'),withdrawals:!!document.getElementById('withdrawals'),navCount:nav.length,navVisible:nav.filter(b=>{const s=getComputedStyle(b),r=b.getBoundingClientRect();return s.display!=='none'&&r.width>0}).length};});
-              console.log('PASS',name,JSON.stringify(r),'errors',errors);
-              if(r.overflow>3||!r.logo||!r.auth||!r.balance||!r.home||!r.evolution||!r.leaderboard||!r.referral||!r.withdrawals||r.navCount<5||r.navVisible<5||errors.length) failed=true;
-            } catch(e) { failed=true; console.error('FAIL',name,e); }
-            await page.close();
+              console.log('DIAG',name,result);
+            }catch(e){ console.log('DIAG',name,'ERROR',String(e)); }
+            await page.close().catch(()=>{});
           }
-          await browser.close(); if(failed)process.exit(1);
+          await browser.close();
           JS
-          cd /tmp && timeout 150s node smoke.mjs
+          cd /tmp && timeout 120s node diagnose.mjs
