@@ -26,7 +26,10 @@ jobs:
           node-version: '22'
       - name: Install Playwright Chromium
         run: |
-          npm --yes exec playwright@1.55.0 install chromium --with-deps
+          cd /tmp
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 --no-audit --no-fund
+          npx playwright install chromium --with-deps
       - name: Check production on phone portrait, landscape, tablet and PC
         shell: bash
         run: |
@@ -47,7 +50,7 @@ jobs:
             const errors=[];
             page.on('pageerror',e=>errors.push(String(e)));
             await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-            await page.waitForTimeout(3500);
+            await page.waitForTimeout(4000);
             const result=await page.evaluate(()=>{
               const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0};
               const box=document.getElementById('offerwallggContent');
@@ -72,4 +75,4 @@ jobs:
           await browser.close();
           if(failed)process.exit(1);
           JS
-          node /tmp/smoke.mjs
+          cd /tmp && node smoke.mjs
