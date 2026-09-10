@@ -1,0 +1,43 @@
+name: Remove global DOM observer v10
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-global-dom-observer-v10.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Remove expensive global MutationObserver
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old="  new MutationObserver(removeSurveys).observe(document.body,{childList:true,subtree:true});"
+          new="  /* one-shot only: global DOM observer removed to prevent render storms */"
+          if old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit('global survey MutationObserver not found')
+          s=s.replace('/production-recovery-v3.js?v=20260910-stable-v6','/production-recovery-v3.js?v=20260910-stable-v10')
+          s=s.replace('/production-recovery-v3.js?v=20260910-stable-v9','/production-recovery-v3.js?v=20260910-stable-v10')
+          p.write_text(s,encoding='utf-8')
+          PY
+          ! grep -q 'new MutationObserver(removeSurveys)' index.html
+          grep -q 'production-recovery-v3.js?v=20260910-stable-v10' index.html
+      - name: Commit stability patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Remove global DOM observer and force stable recovery v10'
+          git pull --rebase origin main
+          git push origin HEAD:main
