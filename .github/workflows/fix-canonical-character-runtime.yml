@@ -2,77 +2,25 @@ name: Fix canonical gender character runtime
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/5 * * * *'
   push:
     paths:
       - '.github/workflows/fix-canonical-character-runtime.yml'
-      - 'runtime-stability-v5.js'
 
 permissions:
-  contents: write
-
-concurrency:
-  group: fix-canonical-character-runtime
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  patch:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Install runtime v5 and align XP server rules
+      - name: Verify stable production runtime contract
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          p=Path('index.html')
-          s=p.read_text(encoding='utf-8')
-          s=s.replace('</script>\\n<script','</script>\n<script')
-          s=re.sub(r'/offerwallgg-integration\.js\?v=[^"<]+','/offerwallgg-integration.js?v=20260910-v5',s)
-          s=re.sub(r'/production-recovery-v3\.js\?v=[^"<]+','/production-recovery-v3.js?v=20260910-v5',s)
-          s=re.sub(r'/runtime-stability-v4\.js\?v=[^"<]+','/runtime-stability-v4.js?v=20260910-v5',s)
-          s=re.sub(r'/runtime-stability-v5\.js\?v=[^"<]+','/runtime-stability-v5.js?v=20260910-v5',s)
-          tag='<script src="/runtime-stability-v5.js?v=20260910-v5"></script>'
-          if 'runtime-stability-v5.js' not in s:
-              if '</body>' not in s: raise SystemExit('Missing closing body tag')
-              s=s.replace('</body>',tag+'\n</body>',1)
-          p.write_text(s,encoding='utf-8')
-
-          w=Path('worker.js')
-          ws=w.read_text(encoding='utf-8')
-          ws=re.sub(
-              r'function offerwallXpForCoins\(value\) \{.*?\n\}',
-              "function offerwallXpForCoins(value) {\n  const coins = Math.max(0, Number(value || 0));\n  return Math.max(20, Math.ceil(coins * 20));\n}",
-              ws,count=1,flags=re.S)
-          ws=ws.replace('xp_per_100_coins:100,','xp_per_100_coins:2000,')
-          w.write_text(ws,encoding='utf-8')
-          PY
-
-      - name: Static production regression checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -Fq 'runtime-stability-v5.js?v=20260910-v5' index.html
-          grep -Fq 'offerwallgg-integration.js?v=20260910-v5' index.html
+          grep -Fq 'offerwallgg-integration.js?v=20260910-stable-v6' index.html
+          grep -Fq 'production-recovery-v3.js?v=20260910-stable-v6' index.html
+          ! grep -Fq 'runtime-stability-v4.js?v=20260910-v5' index.html
+          ! grep -Fq 'runtime-stability-v5.js?v=20260910-v5' index.html
           grep -Fq 'return Math.max(20, Math.ceil(coins * 20));' worker.js
           grep -Fq 'xp_per_100_coins:2000' worker.js
-
-      - name: Commit production hardening
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html worker.js
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Harden responsive runtime games navigation and XP consistency'
-          git pull --rebase origin main
-          git push origin HEAD:main
