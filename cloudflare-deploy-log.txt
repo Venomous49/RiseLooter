@@ -2,11 +2,11 @@
  ⛅️ wrangler 4.130.0
 ────────────────────
 🌀 Building list of assets...
-✨ Read 934 files from the assets directory /home/runner/work/RiseLooter/RiseLooter
+✨ Read 935 files from the assets directory /home/runner/work/RiseLooter/RiseLooter
 🌀 Starting asset upload...
 No updated asset files to upload. Proceeding with deployment...
 Total Upload: 59.85 KiB / gzip: 13.51 KiB
-Worker Startup Time: 6 ms
+Worker Startup Time: 4 ms
 Your Worker has access to the following bindings:
 Binding                                                             Resource                  
 env.ASSETS                                                          Assets                    
@@ -14,17 +14,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (5.11 sec)
+Uploaded loot-up (4.25 sec)
+Deployed loot-up triggers (0.66 sec)
+  https://loot-up.marin-iglesias.workers.dev
+  schedule: */10 * * * *
+Current Version ID: fe0e0058-42dc-4547-a3cf-0d57060df8e5
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
-
-[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mReceived a malformed response from the API[0m
-
-  upstream connect error or disconnect/reset before headers. reset reason: connection termination
-  GET /accounts/567d0185b1b286ef05d53aa6834a7635/workers/subdomain -> 503 Service Unavailable
-  Cloudflare Ray ID: a38e4db11df2879a-IAD
-  
-  If you think this is a bug, please open an issue at: [4mhttps://github.com/cloudflare/workers-sdk/issues/new/choose[0m
-
-
-🪵  Logs were written to "/home/runner/.config/.wrangler/logs/wrangler-2026-09-10_12-05-47_264.log"
