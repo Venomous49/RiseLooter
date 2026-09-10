@@ -17,12 +17,15 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Verify restored worker is complete
+      - name: Verify worker and device-format cleanup
         shell: bash
         run: |
           set -euo pipefail
           test "$(wc -l < worker.js)" -gt 500
           grep -q 'export default' worker.js
-      - name: Deploy restored main to Cloudflare Workers
+          ! grep -q '@media(max-width:1024px)' production-recovery-v3.js
+          ! grep -q '@media(max-width:700px)' production-recovery-v3.js
+      - name: Deploy current main to Cloudflare Workers
         shell: bash
         run: npx --yes wrangler@4 deploy
+# deploy trigger device-format-cleanup-v1
