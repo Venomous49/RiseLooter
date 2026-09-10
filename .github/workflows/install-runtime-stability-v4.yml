@@ -1,0 +1,38 @@
+name: Install runtime stability v4
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/install-runtime-stability-v4.yml'
+permissions:
+  contents: write
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Install fresh runtime loader
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='<script src="/runtime-stability-v4.js?v=20260910-1"></script>'
+          if marker not in s:
+              s=s.replace('</body>', marker+'\n</body>')
+          s=s.replace('/offerwallgg-integration.js?v=20260910-4','/offerwallgg-integration.js?v=20260910-runtime-v4')
+          s=s.replace('/production-recovery-v3.js?v=20260910-4','/production-recovery-v3.js?v=20260910-runtime-v4')
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name 'RiseLooter Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Load runtime stability v4 and bust production cache'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
