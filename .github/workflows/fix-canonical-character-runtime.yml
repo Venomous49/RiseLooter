@@ -25,7 +25,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Install production runtime stability v5 and align server rules
+      - name: Install runtime v5 and align XP server rules
         shell: bash
         run: |
           set -euo pipefail
@@ -33,7 +33,6 @@ jobs:
           from pathlib import Path
           import re
 
-          # 1) Load one fresh authoritative runtime on every device.
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
           s=s.replace('</script>\\n<script','</script>\n<script')
@@ -47,43 +46,14 @@ jobs:
               s=s.replace('</body>',tag+'\n</body>',1)
           p.write_text(s,encoding='utf-8')
 
-          # 2) Cloudflare API/UI must advertise and calculate the same XP rule as Supabase.
           w=Path('worker.js')
           ws=w.read_text(encoding='utf-8')
           ws=re.sub(
               r'function offerwallXpForCoins\(value\) \{.*?\n\}',
               "function offerwallXpForCoins(value) {\n  const coins = Math.max(0, Number(value || 0));\n  return Math.max(20, Math.ceil(coins * 20));\n}",
-              ws,
-              count=1,
-              flags=re.S,
-          )
+              ws,count=1,flags=re.S)
           ws=ws.replace('xp_per_100_coins:100,','xp_per_100_coins:2000,')
           w.write_text(ws,encoding='utf-8')
-
-          # 3) Future changes to the production runtimes/histories must deploy automatically.
-          d=Path('.github/workflows/deploy-cloudflare.yml')
-          ds=d.read_text(encoding='utf-8')
-          anchor="      - 'ui-economy-polish-v2.js'\n"
-          additions=(
-              "      - 'runtime-stability-v4.js'\n"
-              "      - 'runtime-stability-v5.js'\n"
-              "      - 'production-recovery-v3.js'\n"
-              "      - 'offerwallgg-integration.js'\n"
-              "      - 'history-detail-v2.js'\n"
-          )
-          if "      - 'runtime-stability-v5.js'\n" not in ds:
-              ds=ds.replace(anchor,anchor+additions,1)
-          d.write_text(ds,encoding='utf-8')
-
-          required=[
-            'runtime-stability-v5.js?v=20260910-v5',
-            'offerwallgg-integration.js?v=20260910-v5',
-            'return Math.max(20, Math.ceil(coins * 20));',
-            'xp_per_100_coins:2000,'
-          ]
-          joined=p.read_text(encoding='utf-8')+'\n'+w.read_text(encoding='utf-8')
-          for x in required:
-              if x not in joined: raise SystemExit('Missing invariant: '+x)
           PY
 
       - name: Static production regression checks
@@ -94,8 +64,6 @@ jobs:
           grep -Fq 'offerwallgg-integration.js?v=20260910-v5' index.html
           grep -Fq 'return Math.max(20, Math.ceil(coins * 20));' worker.js
           grep -Fq 'xp_per_100_coins:2000' worker.js
-          grep -Fq "'runtime-stability-v5.js'" .github/workflows/deploy-cloudflare.yml
-          grep -Fq "'history-detail-v2.js'" .github/workflows/deploy-cloudflare.yml
 
       - name: Commit production hardening
         shell: bash
@@ -103,8 +71,8 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html worker.js .github/workflows/deploy-cloudflare.yml
+          git add index.html worker.js
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Harden responsive runtime navigation games and XP consistency'
+          git commit -m 'Harden responsive runtime games navigation and XP consistency'
           git pull --rebase origin main
           git push origin HEAD:main
