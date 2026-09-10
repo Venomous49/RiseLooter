@@ -4,6 +4,7 @@ name: Deploy RiseLooter to Cloudflare
 # Stable Offerwall v8 deployment trigger 2026-09-10
 # Stability v10 direct deployment trigger 2026-09-10
 # Stability v11 non-recursive runtime direct deployment 2026-09-10
+# Stability v12 creator runtime trigger 2026-09-10
 on:
   push:
     branches: [main]
@@ -14,6 +15,8 @@ on:
       - 'wrangler.jsonc'
       - 'index.html'
       - 'fixed-stage-home.js'
+      - 'silhouette-stage-locks.js'
+      - 'creator-cache-v23.js'
       - 'safe-ui-bootstrap.js'
       - 'site-polish-v3.js'
       - 'mobile-recovery-v1.js'
