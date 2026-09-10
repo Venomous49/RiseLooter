@@ -1,9 +1,10 @@
-/* RiseLooter production recovery v3.2 — one-shot session/profile + responsive balance + canonical art.
+/* RiseLooter production recovery v3.3 — one-shot session/profile + canonical art.
+   Device-specific portrait/landscape/tablet/PC overrides intentionally removed.
    No polling, no focus loops, no duplicate renderProfile calls. */
 (() => {
   'use strict';
-  if (window.__RISELOOTER_PRODUCTION_RECOVERY_V32__) return;
-  window.__RISELOOTER_PRODUCTION_RECOVERY_V32__ = true;
+  if (window.__RISELOOTER_PRODUCTION_RECOVERY_V33__) return;
+  window.__RISELOOTER_PRODUCTION_RECOVERY_V33__ = true;
 
   const LEVELS=[1,5,10,15,20,30,40,50];
   const SLUGS=['01-debutant','05-debrouillard','10-chasseur','15-hustler','20-pro','30-elite','40-cyber-looter','50-rise-looter'];
@@ -12,23 +13,10 @@
   const profileAsset=(profile,stage)=>`${String(profile?.avatar_gender||'male').toLowerCase()==='female'?'/female-':'/'}${SLUGS[Math.max(0,Math.min(7,stage))]}.webp?v=stable-v8`;
 
   function installCss(){
-    if ($('riselooter-production-recovery-v32-style')) return;
+    if ($('riselooter-production-recovery-v33-style')) return;
     const css=document.createElement('style');
-    css.id='riselooter-production-recovery-v32-style';
+    css.id='riselooter-production-recovery-v33-style';
     css.textContent=`
-      @media(max-width:1024px){
-        header{height:auto!important;min-height:0!important;overflow:visible!important;display:flex!important;flex-wrap:wrap!important;gap:8px!important}
-        .header-right{display:flex!important;visibility:visible!important;width:100%!important;flex-wrap:wrap!important;gap:8px!important;align-items:center!important}
-        .header-right .coin-pill,.coin-pill{display:flex!important;visibility:visible!important;opacity:1!important;position:relative!important;transform:none!important;clip:auto!important;clip-path:none!important;box-sizing:border-box!important;justify-content:center!important;margin:0!important}
-        nav{display:flex!important;width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
-      }
-      @media(max-width:700px){
-        header{padding:10px 14px!important}
-        .logo{flex:1 1 100%!important}
-        .header-right .coin-pill,.coin-pill{flex:1 1 100%!important;width:100%!important}
-        .header-right #withdrawHeader{flex:1 1 62%!important}
-        .header-right #authButton{flex:0 1 auto!important}
-      }
       #mainCharacter img.rl-prod-stage,#nextEvolutionShadow img.rl-prod-stage{display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center bottom!important;background:transparent!important;filter:none!important}
       #nextEvolutionShadow{background:#03090d!important;overflow:hidden!important}
     `;
