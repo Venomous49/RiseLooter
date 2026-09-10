@@ -1,5 +1,5 @@
 /* RiseLooter production recovery v3.1 — one-shot session/profile + responsive balance + canonical art.
-   No polling, no focus loops, no Offerwall reinjection. */
+   No polling, no focus loops, no Offerwall reinjection. Stable-v6 deployment anchor. */
 (() => {
   'use strict';
   if (window.__RISELOOTER_PRODUCTION_RECOVERY_V31__) return;
