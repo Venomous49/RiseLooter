@@ -1,0 +1,43 @@
+name: Stability v11 character runtime
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stability-v11-character-runtime.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Force non-recursive character runtimes v11
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          s=s.replace('/fixed-stage-home.js?v=base-hq-realesrgan-v2','/fixed-stage-home.js?v=stability-v11')
+          s=s.replace('/silhouette-stage-locks.js?v=silhouette-4k-v1','/silhouette-stage-locks.js?v=stability-v11')
+          p.write_text(s)
+          PY
+          grep -q 'fixed-stage-home.js?v=stability-v11' worker.js
+          grep -q 'silhouette-stage-locks.js?v=stability-v11' worker.js
+      - name: Commit stability v11 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Force non-recursive character runtime v11'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
