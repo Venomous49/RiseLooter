@@ -1,0 +1,75 @@
+name: Production smoke tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/production-smoke.yml'
+      - 'runtime-stability-v5.js'
+      - 'index.html'
+      - 'worker.js'
+      - 'offerwallgg-integration.js'
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Chromium
+        run: |
+          npm --yes exec playwright@1.55.0 install chromium --with-deps
+      - name: Check production on phone portrait, landscape, tablet and PC
+        shell: bash
+        run: |
+          cat > /tmp/smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const url='https://loot-up.marin-iglesias.workers.dev/?smoke='+Date.now();
+          const sizes=[
+            ['phone-portrait',390,844],
+            ['phone-landscape',844,390],
+            ['tablet-portrait',768,1024],
+            ['tablet-landscape',1024,768],
+            ['desktop',1366,768]
+          ];
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          for(const [name,width,height] of sizes){
+            const page=await browser.newPage({viewport:{width,height}});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+            await page.waitForTimeout(3500);
+            const result=await page.evaluate(()=>{
+              const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0};
+              const box=document.getElementById('offerwallggContent');
+              return {
+                overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+                logo:!!document.querySelector('.logo'),
+                auth:vis('authButton'),
+                balance:!!document.getElementById('headerCoins'),
+                home:vis('home'),
+                games:vis('gamesOfferwall'),
+                gamesContent:(box?.textContent||'').trim().length,
+                evolution:!!document.getElementById('evolution'),
+                leaderboard:!!document.getElementById('leaderboard'),
+                referral:!!document.getElementById('referral'),
+                withdrawals:!!document.getElementById('withdrawals')
+              };
+            });
+            console.log(name,JSON.stringify(result),errors.length?errors:'');
+            if(result.overflow>3||!result.logo||!result.auth||!result.balance||!result.home||!result.games||result.gamesContent<10||!result.evolution||!result.leaderboard||!result.referral||!result.withdrawals||errors.length){failed=true;}
+            await page.close();
+          }
+          await browser.close();
+          if(failed)process.exit(1);
+          JS
+          node /tmp/smoke.mjs
