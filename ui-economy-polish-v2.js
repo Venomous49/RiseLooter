@@ -92,5 +92,5 @@
   observer.observe(document.documentElement,{childList:true,subtree:true});
   setTimeout(apply,800);
   setTimeout(apply,2200);
-  // 2026-09-10: deployment trigger after installing production-recovery-v3.
+  // 2026-09-10: deployment trigger after installing detailed history v2.
 })();
