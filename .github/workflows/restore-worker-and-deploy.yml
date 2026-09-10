@@ -1,0 +1,38 @@
+name: Restore rewards worker and deploy
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-worker-and-deploy.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore complete worker and keep direct rewards injection
+        run: |
+          git show 991aa4e0fa921f517a985ee260f3ba629c689c0c:worker.js > worker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          needle="    element.append('<script src=\"/admin-dashboard.js?v=stability-v13\" defer></script>', { html: true });"
+          add=needle+"\n    element.append('<script src=\"/offerwallgg-stable-v8.js?v=20260910-detailed-v82\" defer></script>', { html: true });\n    element.append('<script src=\"/production-recovery-v3.js?v=20260910-rewards-v34\" defer></script>', { html: true });"
+          assert needle in s
+          p.write_text(s.replace(needle,add,1))
+          PY
+          grep -q 'handleOfferwallGgMissions' worker.js
+          grep -q 'offerwall_mission_completions' worker.js
+          grep -q 'xp_per_100_coins:2000' worker.js
+          grep -q '20260910-detailed-v82' worker.js
+      - name: Commit restored worker
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add worker.js
+          git commit -m "Restore complete rewards worker with detailed missions"
+          git push
