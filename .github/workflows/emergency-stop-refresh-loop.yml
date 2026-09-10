@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Remove eager startup work only
         run: |
+          echo 'Emergency startup-loop repair v2'
           python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html')
@@ -26,7 +27,6 @@ jobs:
           old='''renderHairChoices();\n\nupdateCreatorPreview();\n\nrenderTrack(1);'''
           if old not in s: raise SystemExit('creator startup block not found')
           s=s.replace(old,'renderTrack(1);',1)
-          # Make every section load only when its existing nav button is clicked.
           needle='''if(\nbtn.dataset.nav ===\n"leaderboard"\n){\n\nloadLeaderboard();\n\n}\n'''
           repl='''const lazyLoaders = {\n  leaderboard: () => loadLeaderboard(),\n  missions: () => loadMissions("all"),\n  referral: () => loadReferralSummary(),\n  withdrawals: () => loadWithdrawals(),\n  shop: () => loadShop(),\n  inventory: () => loadInventory()\n};\nif(lazyLoaders[btn.dataset.nav]){ lazyLoaders[btn.dataset.nav](); }\n'''
           if needle not in s: raise SystemExit('nav loader block not found')
