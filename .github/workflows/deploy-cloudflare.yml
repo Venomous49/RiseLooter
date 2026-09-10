@@ -1,7 +1,7 @@
 name: Deploy RiseLooter to Cloudflare
 
 # Runtime-complete deployment trigger 2026-09-10
-# Stable Offerwall v7 deployment trigger 2026-09-10
+# Stable Offerwall v8 deployment trigger 2026-09-10
 on:
   push:
     branches: [main]
@@ -21,6 +21,7 @@ on:
       - 'production-recovery-v3.js'
       - 'offerwallgg-integration.js'
       - 'offerwallgg-stable-v7.js'
+      - 'offerwallgg-stable-v8.js'
       - 'history-detail-v2.js'
       - 'evolution-test-mode.js'
       - 'cpx-integration.js'
