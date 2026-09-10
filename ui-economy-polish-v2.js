@@ -2,8 +2,8 @@
   if (window.__RISELOOTER_UI_ECONOMY_POLISH_V2__) return;
   window.__RISELOOTER_UI_ECONOMY_POLISH_V2__ = true;
 
-  const XP_PER_100_RL = 500;
-  const MIN_MISSION_XP = 5;
+  const XP_PER_100_RL = 2000;
+  const MIN_MISSION_XP = 20;
 
   function parseRl(text){
     const m = String(text || '').replace(/\u202f/g,' ').match(/([0-9]+(?:[\s.,][0-9]+)*)\s*RL/i);
@@ -75,7 +75,7 @@
 
   function syncXpRule(){
     const rule = document.querySelector('#xpHistoryPanel .xp-rule');
-    if (rule) rule.textContent = 'XP proportionnel : 500 XP / 100 RL Coins • minimum 5 XP par mission • série : +15 XP/jour';
+    if (rule) rule.textContent = 'XP proportionnel : 2 000 XP / 100 RL Coins (20 XP / RL Coin) • minimum 20 XP par mission • série : +15 XP/jour';
   }
 
   function apply(){
