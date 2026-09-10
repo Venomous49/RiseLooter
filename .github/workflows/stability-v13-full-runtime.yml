@@ -1,0 +1,108 @@
+name: Stability v13 full runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stability-v13-full-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Remove heavy startup work and bump stable runtimes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('index.html')
+          s=p.read_text()
+
+          old='''await Promise.all(\n[\nloadMissions("all"),\nloadShop(),\nloadInventory()\n]\n);\n\nreturn;'''
+          new='''return;'''
+          if old not in s:
+              raise SystemExit('guest startup block not found')
+          s=s.replace(old,new,1)
+
+          old='''await Promise.all(\n[\nloadMissions("all"),\nloadShop(),\nloadInventory(),\nloadLeaderboard(),\nloadReferralSummary(),\nloadWithdrawals()\n]\n);'''
+          new='''// Stability v13: secondary sections are loaded only when requested.\n// The initial page load only restores the authenticated profile and visible dashboard.'''
+          if old not in s:
+              raise SystemExit('authenticated startup fan-out not found')
+          s=s.replace(old,new,1)
+
+          old='''renderHairChoices();\n\nupdateCreatorPreview();\n\nrenderTrack(1);'''
+          new='''// Creator assets are initialized only if the creator modal is actually needed.\nrenderTrack(1);'''
+          if old not in s:
+              raise SystemExit('creator eager init block not found')
+          s=s.replace(old,new,1)
+
+          old='''if(\nbtn.dataset.nav ===\n"leaderboard"\n){\n\nloadLeaderboard();\n\n}\n'''
+          new='''if(btn.dataset.nav === "leaderboard") loadLeaderboard();\nif(btn.dataset.nav === "missions") loadMissions("all");\nif(btn.dataset.nav === "referral") loadReferralSummary();\nif(btn.dataset.nav === "withdrawals") loadWithdrawals();\nif(btn.dataset.nav === "shop") loadShop();\nif(btn.dataset.nav === "inventory") loadInventory();\n'''
+          if old not in s:
+              raise SystemExit('navigation lazy-load anchor not found')
+          s=s.replace(old,new,1)
+
+          s=s.replace('/production-recovery-v3.js?v=20260910-stable-v10','/production-recovery-v3.js?v=20260910-stable-v13')
+          p.write_text(s)
+
+          p=Path('production-recovery-v3.js')
+          s=p.read_text()
+          s=s.replace('/history-detail-v2.js?v=stable-v8','/history-detail-v2.js?v=stable-v13')
+          old='''      syncProfile(data);'''
+          new='''      syncProfile(data);\n      try{window.riselooterApplyFixedStageArt?.();}catch(_){}\n      try{window.riselooterSyncStageSilhouettes?.();}catch(_){}'''
+          if old in s and 'riselooterApplyFixedStageArt?.()' not in s:
+              s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('worker.js')
+          s=p.read_text()
+          s=s.replace('/creator-cache-v23.js?v=27','/creator-cache-v23.js?v=stability-v13')
+          s=s.replace('/evolution-test-mode.js?v=no-surveys-1','/evolution-test-mode.js?v=stability-v13')
+          s=s.replace('/admin-dashboard.js?v=admin-v1','/admin-dashboard.js?v=stability-v13')
+          p.write_text(s)
+          PY
+
+      - name: Static stability checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q 'setInterval(probeAdmin' admin-dashboard.js
+          ! grep -q 'window.addEventListener.*focus.*syncAdmin' evolution-test-mode.js
+          ! grep -q 'new MutationObserver' creator-cache-v23.js
+          ! grep -q 'new MutationObserver' fixed-stage-home.js
+          ! grep -q 'new MutationObserver' silhouette-stage-locks.js
+          ! grep -q 'observer.observe(document.documentElement' username-guard.js
+          grep -q 'stability-v13' worker.js
+          grep -q 'stable-v13' production-recovery-v3.js
+          grep -q '20260910-stable-v13' index.html
+
+      - name: Commit stabilized runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Venomous49'
+          git config user.email 'marin.iglesias@hotmail.fr'
+          git add index.html production-recovery-v3.js worker.js history-detail-v2.js username-guard.js admin-dashboard.js evolution-test-mode.js creator-cache-v23.js fixed-stage-home.js silhouette-stage-locks.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Stabilize production runtime v13'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Deploy stabilized runtime directly to Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy
