@@ -5,7 +5,7 @@ on:
     paths:
       - '.github/workflows/patch-targeted-surveys.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,44 +17,13 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Remove stale frontend overrides from live guard
+      - name: Verify live guard repair and preserved features
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('worker-live-guard.js')
-          s=p.read_text()
-          start=s.find('class RemoveElement{')
-          end=s.find('export default {', start)
-          if start < 0 or end < 0:
-              raise SystemExit('stale RuntimeHead block not found')
-          s=s[:start]+s[end:]
-          old="""    const response=await payoutWorker.fetch(request,env,ctx);\n    const ct=response.headers.get('content-type')||'';\n    if(!ct.includes('text/html')) return response;\n    return new HTMLRewriter()\n      .on('head',new RuntimeHead())\n      .on('#missions',new RemoveElement())\n      .on('#challenges',new RemoveElement())\n      .on('script[src*=\"cpx\"]',new RemoveElement())\n      .on('script[src*=\"site-polish-v3\"]',new RemoveElement())\n      .transform(response);"""
-          new="""    return payoutWorker.fetch(request,env,ctx);"""
-          if old not in s:
-              raise SystemExit('live HTML override block not found')
-          s=s.replace(old,new,1)
-          p.write_text(s)
-          PY
           ! grep -q 'RuntimeHead' worker-live-guard.js
           ! grep -q "on('#missions'" worker-live-guard.js
           ! grep -q 'offerwallgg-integration.js?v=native-games-v2' worker-live-guard.js
-      - name: Commit live guard repair
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add worker-live-guard.js
-          if ! git diff --cached --quiet; then
-            git commit -m 'Stop live guard from replacing current RiseLooter frontend'
-            git push origin HEAD:main
-          fi
-      - name: Verify preserved feature runtime
-        shell: bash
-        run: |
-          set -euo pipefail
           test "$(wc -l < worker.js)" -gt 500
           grep -q '/api/xp/history' worker.js
           grep -q '/api/rl/history' worker.js
@@ -64,3 +33,10 @@ jobs:
       - name: Deploy repaired current main to Cloudflare Workers
         shell: bash
         run: npx --yes wrangler@4 deploy
+      - name: Verify production responds
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/ -o /tmp/home.html
+          grep -qi 'RISE' /tmp/home.html
