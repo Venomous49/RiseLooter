@@ -21,9 +21,10 @@ jobs:
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
-          marker='<script src="/runtime-stability-v4.js?v=20260910-1"></script>'
+          marker='<script src="/runtime-stability-v4.js?v=20260910-2"></script>'
           if marker not in s:
               s=s.replace('</body>', marker+'\n</body>')
+          s=s.replace('/runtime-stability-v4.js?v=20260910-1','/runtime-stability-v4.js?v=20260910-2')
           s=s.replace('/offerwallgg-integration.js?v=20260910-4','/offerwallgg-integration.js?v=20260910-runtime-v4')
           s=s.replace('/production-recovery-v3.js?v=20260910-4','/production-recovery-v3.js?v=20260910-runtime-v4')
           p.write_text(s,encoding='utf-8')
