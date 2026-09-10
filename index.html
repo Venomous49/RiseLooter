@@ -1770,7 +1770,7 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   }
   removeSurveys();
-  /* one-shot only: global DOM observer removed to prevent render storms */
+  new MutationObserver(removeSurveys).observe(document.body,{childList:true,subtree:true});
 });
 </script>
 </head>
@@ -4161,6 +4161,14 @@ $("headerCoins").textContent =
 
 renderStreakDays(0);
 
+await Promise.all(
+[
+loadMissions("all"),
+loadShop(),
+loadInventory()
+]
+);
+
 return;
 
 }
@@ -4238,8 +4246,16 @@ $("creatorModal")
 
 }
 
-// Stability v13: secondary sections are loaded only when requested.
-// The initial page load only restores the authenticated profile and visible dashboard.
+await Promise.all(
+[
+loadMissions("all"),
+loadShop(),
+loadInventory(),
+loadLeaderboard(),
+loadReferralSummary(),
+loadWithdrawals()
+]
+);
 
 }
 
@@ -4269,12 +4285,14 @@ block:"start"
 
 }
 
-if(btn.dataset.nav === "leaderboard") loadLeaderboard();
-if(btn.dataset.nav === "missions") loadMissions("all");
-if(btn.dataset.nav === "referral") loadReferralSummary();
-if(btn.dataset.nav === "withdrawals") loadWithdrawals();
-if(btn.dataset.nav === "shop") loadShop();
-if(btn.dataset.nav === "inventory") loadInventory();
+if(
+btn.dataset.nav ===
+"leaderboard"
+){
+
+loadLeaderboard();
+
+}
 
 };
 
@@ -4451,7 +4469,10 @@ setupChoiceGroup(
 "hairColor"
 );
 
-// Creator assets are initialized only if the creator modal is actually needed.
+renderHairChoices();
+
+updateCreatorPreview();
+
 renderTrack(1);
 
 renderStreakDays(0);
