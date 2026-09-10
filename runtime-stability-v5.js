@@ -1,6 +1,6 @@
-/* RiseLooter runtime stability v5.1 — static responsive guard only.
-   Important: no polling, no repeated profile reloads, no Offerwall reinjection.
-   Authoritative data loading remains owned by the existing production modules. */
+/* RiseLooter runtime stability v5.1 — RETIRED from production in stable-v6.
+   This file remains as a harmless static fallback only and is no longer referenced by index.html.
+   Important: no polling, no repeated profile reloads, no Offerwall reinjection. */
 (() => {
   'use strict';
   if (window.__RISELOOTER_RUNTIME_STABILITY_V51__) return;
