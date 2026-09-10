@@ -4161,13 +4161,7 @@ $("headerCoins").textContent =
 
 renderStreakDays(0);
 
-await Promise.all(
-[
-loadMissions("all"),
-loadShop(),
-loadInventory()
-]
-);
+/* Startup intentionally idle: sections load on demand. */
 
 return;
 
@@ -4246,16 +4240,7 @@ $("creatorModal")
 
 }
 
-await Promise.all(
-[
-loadMissions("all"),
-loadShop(),
-loadInventory(),
-loadLeaderboard(),
-loadReferralSummary(),
-loadWithdrawals()
-]
-);
+/* Startup intentionally idle: sections load on demand. */
 
 }
 
@@ -4285,14 +4270,15 @@ block:"start"
 
 }
 
-if(
-btn.dataset.nav ===
-"leaderboard"
-){
-
-loadLeaderboard();
-
-}
+const lazyLoaders = {
+  leaderboard: () => loadLeaderboard(),
+  missions: () => loadMissions("all"),
+  referral: () => loadReferralSummary(),
+  withdrawals: () => loadWithdrawals(),
+  shop: () => loadShop(),
+  inventory: () => loadInventory()
+};
+if(lazyLoaders[btn.dataset.nav]){ lazyLoaders[btn.dataset.nav](); }
 
 };
 
@@ -4468,10 +4454,6 @@ setupChoiceGroup(
 "hairColorChoices",
 "hairColor"
 );
-
-renderHairChoices();
-
-updateCreatorPreview();
 
 renderTrack(1);
 
