@@ -172,18 +172,6 @@ async function paypalHealth(request,env){
   }catch(_){return json({ok:false,environment:env.PAYPAL_ENV||'sandbox',oauth:false,error:'paypal unreachable'},502)}
 }
 
-class RemoveElement{
-  element(element){ element.remove(); }
-}
-
-class RuntimeHead{
-  element(element){
-    element.append('<link rel="stylesheet" href="/visual-polish-v1.css?v=20260823-v1">',{html:true});
-    element.append('<script src="/launch-state.js?v=launch-zero-v1" defer></script>',{html:true});
-    element.append('<script src="/offerwallgg-integration.js?v=native-games-v2" defer></script>',{html:true});
-  }
-}
-
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
@@ -201,16 +189,7 @@ export default {
 
     if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/index.html')) await ensureLaunchReset(env);
 
-    const response=await payoutWorker.fetch(request,env,ctx);
-    const ct=response.headers.get('content-type')||'';
-    if(!ct.includes('text/html')) return response;
-    return new HTMLRewriter()
-      .on('head',new RuntimeHead())
-      .on('#missions',new RemoveElement())
-      .on('#challenges',new RemoveElement())
-      .on('script[src*="cpx"]',new RemoveElement())
-      .on('script[src*="site-polish-v3"]',new RemoveElement())
-      .transform(response);
+    return payoutWorker.fetch(request,env,ctx);
   },
   async scheduled(event,env,ctx){
     if(typeof payoutWorker.scheduled==='function') return payoutWorker.scheduled(event,env,ctx);
