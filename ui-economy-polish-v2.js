@@ -92,5 +92,5 @@
   observer.observe(document.documentElement,{childList:true,subtree:true});
   setTimeout(apply,800);
   setTimeout(apply,2200);
-  // 2026-09-10: deployment trigger after runtime stability v4 installation.
+  // 2026-09-10: deployment trigger for fully audited production runtime v5.
 })();
