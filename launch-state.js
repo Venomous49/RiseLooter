@@ -14,6 +14,15 @@
     document.head.appendChild(signupScript);
   }
 
+  // Compact histories + proportional XP display layer.
+  if (!document.querySelector('script[data-riselooter-economy-polish]')) {
+    const economyScript = document.createElement('script');
+    economyScript.src = '/ui-economy-polish-v2.js?v=20260910-1';
+    economyScript.defer = true;
+    economyScript.dataset.riselooterEconomyPolish = '1';
+    document.head.appendChild(economyScript);
+  }
+
   // Exact RiseLooter display conversion: 100 RL Coins = 1.00 EUR.
   function parseCoins(value){
     const normalized = String(value ?? '')
