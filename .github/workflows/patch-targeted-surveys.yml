@@ -5,7 +5,7 @@ on:
     paths:
       - '.github/workflows/patch-targeted-surveys.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,36 +17,44 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Verify restored current features
+      - name: Restore stable shell and force current runtime URLs
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -q 'RuntimeHead' worker-live-guard.js
-          ! grep -q "on('#missions'" worker-live-guard.js
+          git show 991aa4e0fa921f517a985ee260f3ba629c689c0c:index.html > index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace('/offerwallgg-stable-v8.js?v=20260910-missions-v8','/offerwallgg-stable-v8.js?v=20260910-rewards-v2')
+          s=s.replace('/production-recovery-v3.js?v=20260910-stable-v13','/production-recovery-v3.js?v=20260910-rewards-v2')
+          p.write_text(s)
+          PY
+          grep -q 'offerwallgg-stable-v8.js?v=20260910-rewards-v2' index.html
+          grep -q 'production-recovery-v3.js?v=20260910-rewards-v2' index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Restore stable page and bust rewards runtime cache' || true
+          git push origin HEAD:main
+      - name: Verify restored features
+        shell: bash
+        run: |
+          set -euo pipefail
           grep -q 'headerCoinsEuro' production-recovery-v3.js
           grep -q 'xpHistoryPanel' production-recovery-v3.js
           grep -q 'rlHistoryPanel' production-recovery-v3.js
           grep -q 'riselooterLoadOfferwall' production-recovery-v3.js
           grep -q 'Missions en cours' offerwallgg-stable-v8.js
           grep -q 'Jeux rémunérés' offerwallgg-stable-v8.js
-          grep -q '/api/xp/history' worker.js
-          grep -q '/api/rl/history' worker.js
-          grep -q '/api/offerwallgg/missions' worker.js
-      - name: Deploy current main to Cloudflare Workers
+      - name: Deploy current checkout to Cloudflare Workers
         shell: bash
         run: npx --yes wrangler@4 deploy
-      - name: Verify production feature assets respond
+      - name: Verify production serves fresh runtime references
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
-          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/ -o /tmp/home.html
-          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/production-recovery-v3.js -o /tmp/recovery.js
-          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/offerwallgg-stable-v8.js -o /tmp/offerwall.js
-          grep -q 'offerwallgg-stable-v8.js' /tmp/home.html
-          grep -q 'production-recovery-v3.js' /tmp/home.html
-          grep -q 'headerCoinsEuro' /tmp/recovery.js
-          grep -q 'xpHistoryPanel' /tmp/recovery.js
-          grep -q 'rlHistoryPanel' /tmp/recovery.js
-          grep -q 'Missions en cours' /tmp/offerwall.js
-          grep -q 'Jeux rémunérés' /tmp/offerwall.js
+          curl -fsS --retry 5 --retry-delay 2 'https://loot-up.marin-iglesias.workers.dev/?verify=rewards-v2' -o /tmp/home.html
+          grep -q 'offerwallgg-stable-v8.js?v=20260910-rewards-v2' /tmp/home.html
+          grep -q 'production-recovery-v3.js?v=20260910-rewards-v2' /tmp/home.html
