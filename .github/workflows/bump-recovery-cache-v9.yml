@@ -1,0 +1,35 @@
+name: Bump recovery cache v9
+on:
+  push:
+    paths:
+      - '.github/workflows/bump-recovery-cache-v9.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Bump recovery and history cache versions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('/production-recovery-v3.js?v=20260910-stable-v6','/production-recovery-v3.js?v=20260910-stable-v9')
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -q 'production-recovery-v3.js?v=20260910-stable-v9' index.html
+      - name: Commit cache bust
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Force stable recovery v9 cache refresh'
+          git pull --rebase origin main
+          git push origin HEAD:main
