@@ -17,26 +17,36 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Verify live guard repair and preserved features
+      - name: Verify restored current features
         shell: bash
         run: |
           set -euo pipefail
           ! grep -q 'RuntimeHead' worker-live-guard.js
           ! grep -q "on('#missions'" worker-live-guard.js
-          ! grep -q 'offerwallgg-integration.js?v=native-games-v2' worker-live-guard.js
-          test "$(wc -l < worker.js)" -gt 500
+          grep -q 'headerCoinsEuro' production-recovery-v3.js
+          grep -q 'xpHistoryPanel' production-recovery-v3.js
+          grep -q 'rlHistoryPanel' production-recovery-v3.js
+          grep -q 'riselooterLoadOfferwall' production-recovery-v3.js
+          grep -q 'Missions en cours' offerwallgg-stable-v8.js
+          grep -q 'Jeux rémunérés' offerwallgg-stable-v8.js
           grep -q '/api/xp/history' worker.js
           grep -q '/api/rl/history' worker.js
           grep -q '/api/offerwallgg/missions' worker.js
-          grep -q 'offerwallgg-stable-v8.js' index.html
-          grep -q 'production-recovery-v3.js' index.html
-      - name: Deploy repaired current main to Cloudflare Workers
+      - name: Deploy current main to Cloudflare Workers
         shell: bash
         run: npx --yes wrangler@4 deploy
-      - name: Verify production responds
+      - name: Verify production feature assets respond
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
           curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/ -o /tmp/home.html
-          grep -qi 'RISE' /tmp/home.html
+          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/production-recovery-v3.js -o /tmp/recovery.js
+          curl -fsS --retry 5 --retry-delay 2 https://loot-up.marin-iglesias.workers.dev/offerwallgg-stable-v8.js -o /tmp/offerwall.js
+          grep -q 'offerwallgg-stable-v8.js' /tmp/home.html
+          grep -q 'production-recovery-v3.js' /tmp/home.html
+          grep -q 'headerCoinsEuro' /tmp/recovery.js
+          grep -q 'xpHistoryPanel' /tmp/recovery.js
+          grep -q 'rlHistoryPanel' /tmp/recovery.js
+          grep -q 'Missions en cours' /tmp/offerwall.js
+          grep -q 'Jeux rémunérés' /tmp/offerwall.js
