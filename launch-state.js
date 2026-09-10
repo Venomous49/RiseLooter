@@ -1,4 +1,4 @@
-/* RiseLooter launch-state guard: zero-progress display + canonical username leaderboard. */
+/* RiseLooter launch-state guard: preserve database progress and keep essential UI reachable. */
 (() => {
   if (window.__RISELOOTER_LAUNCH_STATE_V1__) return;
   window.__RISELOOTER_LAUNCH_STATE_V1__ = true;
@@ -13,7 +13,6 @@
     document.head.appendChild(signupScript);
   }
 
-  // Economy/XP layer. This is the single source of truth for mission XP.
   if (!document.querySelector('script[data-riselooter-economy-polish]')) {
     const economyScript = document.createElement('script');
     economyScript.src = '/ui-economy-polish-v2.js?v=20260910-20xp';
@@ -21,6 +20,19 @@
     economyScript.dataset.riselooterEconomyPolish = '1';
     document.head.appendChild(economyScript);
   }
+
+  /* index.html historically hides the wallet under 680 px. Override only that
+     mobile rule; do not rewrite the rest of the responsive layout. */
+  const mobileStyle = document.createElement('style');
+  mobileStyle.id = 'riselooter-essential-mobile-ui';
+  mobileStyle.textContent = `
+    @media (max-width:680px){
+      header .header-right{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important;width:100%!important;align-items:stretch!important}
+      header .header-right .coin-pill{display:inline-flex!important;visibility:visible!important;opacity:1!important;grid-column:1/-1!important;justify-self:stretch!important;justify-content:center!important;align-items:center!important;min-height:40px!important;width:100%!important;box-sizing:border-box!important}
+      header .header-right .btn{min-width:0!important}
+    }
+  `;
+  document.head.appendChild(mobileStyle);
 
   function parseCoins(value){
     const normalized = String(value ?? '').replace(/\u202f/g, '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
@@ -52,7 +64,7 @@
     if (!euroNode) {
       euroNode = document.createElement('span');
       euroNode.id = 'headerEuros';
-      euroNode.style.cssText = 'display:block;margin-top:3px;color:#c9d1d9;font-size:11px;font-weight:800;white-space:nowrap';
+      euroNode.style.cssText = 'display:block;margin-left:8px;color:#c9d1d9;font-size:11px;font-weight:800;white-space:nowrap';
       pill.appendChild(euroNode);
     }
     euroNode.textContent = '= ' + formatEurosFromCoins(coinsNode.textContent);
@@ -65,32 +77,8 @@
     new MutationObserver(syncHeaderEuroBalance).observe(coinsNode,{childList:true,characterData:true,subtree:true});
   }
 
-  function applyZeroProgressDisplay(profile){
-    if (Number(profile?.xp || 0) > 0) return;
-    if (byId('levelBadge')) byId('levelBadge').textContent = 'NIVEAU 0';
-    if (byId('currentLevel')) byId('currentLevel').textContent = '0';
-    if (byId('totalXP')) byId('totalXP').textContent = '0 XP';
-    if (byId('currentStreak')) byId('currentStreak').textContent = '0 jours';
-    if (byId('bestStreak')) byId('bestStreak').textContent = '0 jours';
-    if (byId('streakBig')) byId('streakBig').textContent = '0 jours';
-    if (typeof renderStreakDays === 'function') renderStreakDays(0);
-    if (typeof renderTrack === 'function') renderTrack(0);
-  }
-
-  if (typeof window.renderProfile === 'function') {
-    const baseRenderProfile = window.renderProfile;
-    window.renderProfile = function(profile){
-      const safeProfile = profile && typeof profile === 'object' ? { ...profile } : profile;
-      if (safeProfile && Number(safeProfile.xp || 0) <= 0) {
-        safeProfile.level = 0;
-        safeProfile.current_streak = 0;
-        safeProfile.longest_streak = 0;
-      }
-      baseRenderProfile(safeProfile);
-      applyZeroProgressDisplay(safeProfile);
-      syncHeaderEuroBalance();
-    };
-  }
+  /* Never manufacture a level/XP value here. renderProfile/refreshUser receive
+     the real profile from Supabase and remain the sole source for progression. */
 
   window.loadLeaderboard = async function(){
     const root = byId('leaderboardContent');
@@ -108,7 +96,7 @@
       const rows = Array.isArray(payload.rows) ? payload.rows : [];
       const header = `<div class="leader-row header"><div>RANG</div><div>LOOTER</div><div>NIVEAU</div><div>XP</div><div>SÉRIE</div></div>`;
       if (!rows.length) {
-        root.innerHTML = header + '<div style="padding:16px 8px;color:#99a4b0">Aucun Looter classé pour le moment. Le classement commencera dès qu’un utilisateur gagnera de l’XP.</div>';
+        root.innerHTML = header + '<div style="padding:16px 8px;color:#99a4b0">Aucun Looter classé pour le moment.</div>';
         if (byId('myRank')) byId('myRank').textContent = '—';
         return;
       }
@@ -120,9 +108,28 @@
     }
   };
 
-  watchHeaderBalance();
-  setTimeout(() => {
+  function ensureRewardedGames(){
+    if (byId('gamesOfferwall')) return;
+    /* If the production script did not build its section, retry it once with a
+       fresh URL. This only runs when the games section is genuinely absent. */
+    if (document.querySelector('script[data-riselooter-offerwall-recovery]')) return;
+    try { window.__RISELOOTER_OFFERWALL_GG__ = false; } catch (_) {}
+    const script = document.createElement('script');
+    script.src = '/offerwallgg-integration.js?v=20260910-essential-recovery';
+    script.defer = true;
+    script.dataset.riselooterOfferwallRecovery = '1';
+    document.body.appendChild(script);
+  }
+
+  function refreshRealProfile(){
     try { if (typeof refreshUser === 'function') refreshUser(false); } catch (_) {}
-    syncHeaderEuroBalance();
-  }, 700);
+    setTimeout(syncHeaderEuroBalance,100);
+  }
+
+  watchHeaderBalance();
+  setTimeout(refreshRealProfile,350);
+  setTimeout(ensureRewardedGames,900);
+  setTimeout(ensureRewardedGames,2200);
+  window.addEventListener('pageshow',()=>{refreshRealProfile();setTimeout(ensureRewardedGames,300);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshRealProfile();setTimeout(ensureRewardedGames,300);}});
 })();
