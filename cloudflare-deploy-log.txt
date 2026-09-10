@@ -9,10 +9,10 @@
 + /cloudflare-deploy-log.txt
 Uploaded 1 of 2 assets
 Uploaded 2 of 2 assets
-✨ Success! Uploaded 2 files (619 already uploaded) (1.00 sec)
+✨ Success! Uploaded 2 files (619 already uploaded) (0.66 sec)
 
 Total Upload: 58.14 KiB / gzip: 13.10 KiB
-Worker Startup Time: 6 ms
+Worker Startup Time: 4 ms
 Your Worker has access to the following bindings:
 Binding                                                             Resource                  
 env.ASSETS                                                          Assets                    
@@ -20,10 +20,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (5.98 sec)
-Deployed loot-up triggers (1.13 sec)
+Uploaded loot-up (5.61 sec)
+Deployed loot-up triggers (0.92 sec)
   https://loot-up.marin-iglesias.workers.dev
   schedule: */10 * * * *
-Current Version ID: 7bc31e9f-39d9-46c8-94f7-52181b126447
+Current Version ID: 158b8540-f625-49b6-a90b-440f81f12495
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
