@@ -14,10 +14,10 @@ env.ADMIN_USER_ID ("51731c06-5dc8-4955-895d-f22343be526d")          Environment 
 env.SUPABASE_URL ("https://dvvjujkpnpzerbjxjjsy.supabase...")       Environment Variable      
 env.PAYPAL_ENV ("live")                                             Environment Variable      
 
-Uploaded loot-up (3.63 sec)
-Deployed loot-up triggers (0.63 sec)
+Uploaded loot-up (5.46 sec)
+Deployed loot-up triggers (0.65 sec)
   https://loot-up.marin-iglesias.workers.dev
   schedule: */10 * * * *
-Current Version ID: a6817802-495e-4e53-85c0-6fd38c6e83f5
+Current Version ID: b30df1f2-7865-4b77-9472-8a3a92f25e92
 
 Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
