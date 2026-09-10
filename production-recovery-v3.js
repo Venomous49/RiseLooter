@@ -1,20 +1,20 @@
-/* RiseLooter production recovery v3.1 — one-shot session/profile + responsive balance + canonical art.
-   No polling, no focus loops, no Offerwall reinjection. Stable-v6 deployment anchor. */
+/* RiseLooter production recovery v3.2 — one-shot session/profile + responsive balance + canonical art.
+   No polling, no focus loops, no duplicate renderProfile calls. */
 (() => {
   'use strict';
-  if (window.__RISELOOTER_PRODUCTION_RECOVERY_V31__) return;
-  window.__RISELOOTER_PRODUCTION_RECOVERY_V31__ = true;
+  if (window.__RISELOOTER_PRODUCTION_RECOVERY_V32__) return;
+  window.__RISELOOTER_PRODUCTION_RECOVERY_V32__ = true;
 
   const LEVELS=[1,5,10,15,20,30,40,50];
   const SLUGS=['01-debutant','05-debrouillard','10-chasseur','15-hustler','20-pro','30-elite','40-cyber-looter','50-rise-looter'];
   const $=id=>document.getElementById(id);
   const stageForLevel=level=>{let i=0;LEVELS.forEach((n,x)=>{if(Number(level||1)>=n)i=x;});return i;};
-  const profileAsset=(profile,stage)=>`${String(profile?.avatar_gender||'male').toLowerCase()==='female'?'/female-':'/'}${SLUGS[Math.max(0,Math.min(7,stage))]}.webp?v=stable-v6`;
+  const profileAsset=(profile,stage)=>`${String(profile?.avatar_gender||'male').toLowerCase()==='female'?'/female-':'/'}${SLUGS[Math.max(0,Math.min(7,stage))]}.webp?v=stable-v8`;
 
   function installCss(){
-    if ($('riselooter-production-recovery-v31-style')) return;
+    if ($('riselooter-production-recovery-v32-style')) return;
     const css=document.createElement('style');
-    css.id='riselooter-production-recovery-v31-style';
+    css.id='riselooter-production-recovery-v32-style';
     css.textContent=`
       @media(max-width:1024px){
         header{height:auto!important;min-height:0!important;overflow:visible!important;display:flex!important;flex-wrap:wrap!important;gap:8px!important}
@@ -67,8 +67,6 @@
       const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
       if(error||!data) return;
       try{currentUser=session.user;currentProfile=data;}catch(_){}
-      if(typeof renderProfile==='function') renderProfile(data);
-      if(typeof renderStreakDays==='function') renderStreakDays(Number(data.current_streak||0));
       syncProfile(data);
     }catch(_){}
   }
@@ -76,9 +74,8 @@
   function boot(){
     installCss();
     recoverOnce();
-    setTimeout(recoverOnce,700);
     if(!document.querySelector('script[data-riselooter-history-detail]')){
-      const s=document.createElement('script');s.src='/history-detail-v2.js?v=stable-v6';s.defer=true;s.dataset.riselooterHistoryDetail='1';document.body.appendChild(s);
+      const s=document.createElement('script');s.src='/history-detail-v2.js?v=stable-v8';s.defer=true;s.dataset.riselooterHistoryDetail='1';document.body.appendChild(s);
     }
   }
 
