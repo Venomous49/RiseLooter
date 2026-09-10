@@ -1,0 +1,50 @@
+name: Install stable runtime chain v6
+
+on:
+  push:
+    paths:
+      - '.github/workflows/emergency-stable-runtime-v6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Remove looping runtimes and bust production cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old='''<script src="/offerwallgg-integration.js?v=20260910-v5"></script>\n<script src="/production-recovery-v3.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v4.js?v=20260910-v5"></script>\n<script src="/runtime-stability-v5.js?v=20260910-v5"></script>'''
+          new='''<script src="/offerwallgg-integration.js?v=20260910-stable-v6"></script>\n<script src="/production-recovery-v3.js?v=20260910-stable-v6"></script>'''
+          if old not in s:
+              raise SystemExit('Expected old runtime chain not found; refusing unsafe patch')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -q 'offerwallgg-integration.js?v=20260910-stable-v6' index.html
+          grep -q 'production-recovery-v3.js?v=20260910-stable-v6' index.html
+          ! grep -q 'runtime-stability-v4.js?v=20260910-v5' index.html
+          ! grep -q 'runtime-stability-v5.js?v=20260910-v5' index.html
+      - name: Commit stable production chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Remove looping runtimes and force stable v6 assets'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
