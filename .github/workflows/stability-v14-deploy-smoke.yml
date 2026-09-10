@@ -1,0 +1,65 @@
+name: Stability v14 deploy and smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stability-v14-deploy-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Force V14 runtime cache keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's#safe-ui-bootstrap.js?v=base-hq-realesrgan-v2#safe-ui-bootstrap.js?v=stability-v14#g' worker.js
+          sed -i 's#safe-ui-bootstrap.js?v=stability-v13#safe-ui-bootstrap.js?v=stability-v14#g' worker.js || true
+          sed -i 's#username-guard.js?v=[^"'"']*#username-guard.js?v=stability-v14#g' index.html || true
+          grep -F 'safe-ui-bootstrap.js?v=stability-v14' worker.js
+      - name: Deploy V14 directly to Cloudflare
+        run: npx --yes wrangler@4 deploy
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Production browser smoke
+        shell: bash
+        run: |
+          cat > /tmp/smoke.js <<'JS'
+          const { chromium } = require('playwright');
+          const targets=[
+            ['phone',390,844],['tablet',820,1180],['desktop',1440,900]
+          ];
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            for(const [name,width,height] of targets){
+              const page=await browser.newPage({viewport:{width,height}});
+              const errors=[];
+              page.on('pageerror',e=>errors.push(String(e)));
+              const started=Date.now();
+              const response=await page.goto('https://loot-up.marin-iglesias.workers.dev/?smoke=v14-'+Date.now(),{waitUntil:'domcontentloaded',timeout:20000});
+              if(!response || !response.ok()) throw new Error(name+' HTTP '+(response&&response.status()));
+              await page.waitForTimeout(5000);
+              const probe=await Promise.race([
+                page.evaluate(()=>({title:document.title,body:document.body?.innerText?.length||0,ready:document.readyState})),
+                new Promise((_,rej)=>setTimeout(()=>rej(new Error(name+' main thread unresponsive')),5000))
+              ]);
+              if(probe.body<50) throw new Error(name+' empty body');
+              if(Date.now()-started>16000) throw new Error(name+' startup too slow');
+              console.log(name,probe,'pageErrors',errors.slice(0,5));
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+          node /tmp/smoke.js
