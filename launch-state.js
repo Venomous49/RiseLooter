@@ -76,6 +76,33 @@
     new MutationObserver(syncHeaderEuroBalance).observe(coinsNode,{childList:true,characterData:true,subtree:true});
   }
 
+  // Mission XP progression: 1 XP per RL Coin earned (100 XP / 100 RL Coins).
+  // A validated paid mission always gives at least 1 XP.
+  function syncMissionXpDisplay(){
+    document.querySelectorAll('#gamesOfferwall .ow-card').forEach(card => {
+      const reward = card.querySelector('.ow-reward');
+      const xp = card.querySelector('.ow-xp-reward');
+      if (!reward || !xp) return;
+      const coins = parseCoins(reward.textContent);
+      xp.textContent = '✨ +' + Math.max(1, Math.ceil(coins)).toLocaleString('fr-FR') + ' XP';
+    });
+    document.querySelectorAll('#gamesOfferwall .ow-mission-row').forEach(row => {
+      const right = row.lastElementChild;
+      if (!right) return;
+      const coins = parseCoins(right.textContent);
+      const spans = right.querySelectorAll('span');
+      const xpSpan = Array.from(spans).find(s => /XP/i.test(s.textContent || ''));
+      if (xpSpan) xpSpan.textContent = '+' + Math.max(1, Math.ceil(coins)).toLocaleString('fr-FR') + ' XP';
+    });
+    const rule = document.querySelector('#xpHistoryPanel .xp-rule');
+    if (rule) rule.textContent = 'XP proportionnel : 100 XP / 100 RL Coins • Série : +15 XP/jour';
+  }
+
+  function watchMissionXp(){
+    syncMissionXpDisplay();
+    new MutationObserver(syncMissionXpDisplay).observe(document.documentElement,{childList:true,subtree:true});
+  }
+
   function applyZeroProgressDisplay(profile){
     if (Number(profile?.xp || 0) > 0) return;
     if (byId('levelBadge')) byId('levelBadge').textContent = 'NIVEAU 0';
@@ -117,5 +144,6 @@
   };
 
   watchHeaderBalance();
-  setTimeout(()=>{ try{if(typeof refreshUser==='function')refreshUser(false);}catch(_){} syncHeaderEuroBalance(); },700);
+  watchMissionXp();
+  setTimeout(()=>{ try{if(typeof refreshUser==='function')refreshUser(false);}catch(_){} syncHeaderEuroBalance(); syncMissionXpDisplay(); },700);
 })();
