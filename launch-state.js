@@ -13,21 +13,13 @@
     document.head.appendChild(signupScript);
   }
 
+  // Economy/XP layer. This is the single source of truth for mission XP.
   if (!document.querySelector('script[data-riselooter-economy-polish]')) {
     const economyScript = document.createElement('script');
-    economyScript.src = '/ui-economy-polish-v2.js?v=20260910-1';
+    economyScript.src = '/ui-economy-polish-v2.js?v=20260910-20xp';
     economyScript.defer = true;
     economyScript.dataset.riselooterEconomyPolish = '1';
     document.head.appendChild(economyScript);
-  }
-
-  // Mobile-only recovery layer. It changes layout/visibility only; no economy or auth logic.
-  if (!document.querySelector('script[data-riselooter-mobile-recovery]')) {
-    const mobileScript = document.createElement('script');
-    mobileScript.src = '/mobile-recovery-v1.js?v=20260910-1134';
-    mobileScript.defer = true;
-    mobileScript.dataset.riselooterMobileRecovery = '1';
-    document.head.appendChild(mobileScript);
   }
 
   function parseCoins(value){
@@ -45,11 +37,7 @@
     if (!coinsNode) return;
     const pill = coinsNode.closest('.coin-pill');
     if (!pill) return;
-    pill.style.display = 'inline-flex';
-    pill.style.flexDirection = 'column';
-    pill.style.alignItems = 'center';
-    pill.style.lineHeight = '1.15';
-    pill.style.whiteSpace = 'nowrap';
+
     let balanceLine = byId('headerBalanceLine');
     if (!balanceLine) {
       balanceLine = document.createElement('span');
@@ -59,6 +47,7 @@
       Array.from(pill.childNodes).filter(node => node !== euroExisting).forEach(node => balanceLine.appendChild(node));
       pill.insertBefore(balanceLine, euroExisting || null);
     }
+
     let euroNode = byId('headerEuros');
     if (!euroNode) {
       euroNode = document.createElement('span');
@@ -74,33 +63,6 @@
     if (!coinsNode) return setTimeout(watchHeaderBalance,250);
     syncHeaderEuroBalance();
     new MutationObserver(syncHeaderEuroBalance).observe(coinsNode,{childList:true,characterData:true,subtree:true});
-  }
-
-  // Mission XP progression: 1 XP per RL Coin earned (100 XP / 100 RL Coins).
-  // A validated paid mission always gives at least 1 XP.
-  function syncMissionXpDisplay(){
-    document.querySelectorAll('#gamesOfferwall .ow-card').forEach(card => {
-      const reward = card.querySelector('.ow-reward');
-      const xp = card.querySelector('.ow-xp-reward');
-      if (!reward || !xp) return;
-      const coins = parseCoins(reward.textContent);
-      xp.textContent = '✨ +' + Math.max(1, Math.ceil(coins)).toLocaleString('fr-FR') + ' XP';
-    });
-    document.querySelectorAll('#gamesOfferwall .ow-mission-row').forEach(row => {
-      const right = row.lastElementChild;
-      if (!right) return;
-      const coins = parseCoins(right.textContent);
-      const spans = right.querySelectorAll('span');
-      const xpSpan = Array.from(spans).find(s => /XP/i.test(s.textContent || ''));
-      if (xpSpan) xpSpan.textContent = '+' + Math.max(1, Math.ceil(coins)).toLocaleString('fr-FR') + ' XP';
-    });
-    const rule = document.querySelector('#xpHistoryPanel .xp-rule');
-    if (rule) rule.textContent = 'XP proportionnel : 100 XP / 100 RL Coins • Série : +15 XP/jour';
-  }
-
-  function watchMissionXp(){
-    syncMissionXpDisplay();
-    new MutationObserver(syncMissionXpDisplay).observe(document.documentElement,{childList:true,subtree:true});
   }
 
   function applyZeroProgressDisplay(profile){
@@ -120,9 +82,13 @@
     window.renderProfile = function(profile){
       const safeProfile = profile && typeof profile === 'object' ? { ...profile } : profile;
       if (safeProfile && Number(safeProfile.xp || 0) <= 0) {
-        safeProfile.level = 0; safeProfile.current_streak = 0; safeProfile.longest_streak = 0;
+        safeProfile.level = 0;
+        safeProfile.current_streak = 0;
+        safeProfile.longest_streak = 0;
       }
-      baseRenderProfile(safeProfile); applyZeroProgressDisplay(safeProfile); syncHeaderEuroBalance();
+      baseRenderProfile(safeProfile);
+      applyZeroProgressDisplay(safeProfile);
+      syncHeaderEuroBalance();
     };
   }
 
@@ -131,19 +97,32 @@
     if (!root) return;
     let session = null;
     try { session = (await sb.auth.getSession())?.data?.session || null; } catch (_) {}
-    if (!session?.user) { root.textContent = 'Connecte-toi pour consulter le classement.'; return; }
+    if (!session?.user) {
+      root.textContent = 'Connecte-toi pour consulter le classement.';
+      return;
+    }
     try {
       const response = await fetch('/api/leaderboard',{headers:{authorization:`Bearer ${session.access_token}`},cache:'no-store'});
       if (!response.ok) throw new Error('leaderboard unavailable');
-      const payload = await response.json(); const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      const payload = await response.json();
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
       const header = `<div class="leader-row header"><div>RANG</div><div>LOOTER</div><div>NIVEAU</div><div>XP</div><div>SÉRIE</div></div>`;
-      if (!rows.length) { root.innerHTML=header+'<div style="padding:16px 8px;color:#99a4b0">Aucun Looter classé pour le moment. Le classement commencera dès qu’un utilisateur gagnera de l’XP.</div>'; if(byId('myRank'))byId('myRank').textContent='—'; return; }
-      root.innerHTML=header+rows.map(p=>`<div class="leader-row"><div class="rank">#${Number(p.rank)}</div><div>${typeof escapeHTML==='function'?escapeHTML(String(p.player_name||'')):String(p.player_name||'')}</div><div>Niv. ${Number(p.level||0)}</div><div>${Number(p.xp||0).toLocaleString('fr-FR')} XP</div><div>🔥 ${Number(p.current_streak||0)} j</div></div>`).join('');
-      const mine=rows.find(x=>x.user_id===session.user.id); if(byId('myRank'))byId('myRank').textContent=mine?'# '+mine.rank:'—';
-    } catch (_) { root.textContent='Impossible de charger le classement pour le moment.'; }
+      if (!rows.length) {
+        root.innerHTML = header + '<div style="padding:16px 8px;color:#99a4b0">Aucun Looter classé pour le moment. Le classement commencera dès qu’un utilisateur gagnera de l’XP.</div>';
+        if (byId('myRank')) byId('myRank').textContent = '—';
+        return;
+      }
+      root.innerHTML = header + rows.map(p => `<div class="leader-row"><div class="rank">#${Number(p.rank)}</div><div>${typeof escapeHTML==='function'?escapeHTML(String(p.player_name||'')):String(p.player_name||'')}</div><div>Niv. ${Number(p.level||0)}</div><div>${Number(p.xp||0).toLocaleString('fr-FR')} XP</div><div>🔥 ${Number(p.current_streak||0)} j</div></div>`).join('');
+      const mine = rows.find(x => x.user_id === session.user.id);
+      if (byId('myRank')) byId('myRank').textContent = mine ? '# ' + mine.rank : '—';
+    } catch (_) {
+      root.textContent = 'Impossible de charger le classement pour le moment.';
+    }
   };
 
   watchHeaderBalance();
-  watchMissionXp();
-  setTimeout(()=>{ try{if(typeof refreshUser==='function')refreshUser(false);}catch(_){} syncHeaderEuroBalance(); syncMissionXpDisplay(); },700);
+  setTimeout(() => {
+    try { if (typeof refreshUser === 'function') refreshUser(false); } catch (_) {}
+    syncHeaderEuroBalance();
+  }, 700);
 })();
