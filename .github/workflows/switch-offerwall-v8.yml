@@ -1,4 +1,5 @@
 name: Switch production to Offerwall v8
+# trigger: 2026-09-10 exact-mission-progress
 on:
   push:
     paths:
