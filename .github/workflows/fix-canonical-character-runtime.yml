@@ -21,111 +21,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Install production recovery and canonical runtime
+      - name: Install production runtime stability v4
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
 
-          # Keep the canonical fixed character masters as the runtime source.
-          if 'function canonicalCharacterPath(gender,stage)' not in s:
-              old='''function assetPath(profile,stage){
-  const gender = profile?.avatar_gender || "male";
-  const skin = profile?.avatar_skin || "medium";
-  const hairColor = profile?.avatar_hair_color || "brown";
-  const hairStyle = profile?.avatar_hair_style || (gender === "female" ? "female_long" : "male_textured");
-  if(stage === 0){
-    return `assets/creator/${gender}/${skin}/${hairColor}/${hairStyle}.webp?v=${CREATOR_ASSET_VERSION}`;
-  }
-  return `assets/characters/${gender}/${skin}/${hairColor}/${hairStyle}/${stages[stage].slug}.webp`;
-}
+          # Force fresh copies of the three production runtime scripts.
+          import re
+          s=re.sub(r'/offerwallgg-integration\.js\?v=[^"<]+','/offerwallgg-integration.js?v=20260910-runtime-v4',s)
+          s=re.sub(r'/production-recovery-v3\.js\?v=[^"<]+','/production-recovery-v3.js?v=20260910-runtime-v4',s)
+          s=re.sub(r'/runtime-stability-v4\.js\?v=[^"<]+','/runtime-stability-v4.js?v=20260910-runtime-v4',s)
 
-
-
-
-
-function creatorAssetPath(state=avatarDraft,style=state.hairStyle){
-  return `assets/creator/${state.gender}/${state.skin}/${state.hairColor}/${style}.webp?v=${CREATOR_ASSET_VERSION}`;
-}
-
-function creatorFallbackPath(gender=avatarDraft.gender,skin=avatarDraft.skin,hairColor=avatarDraft.hairColor){
-  const style = gender === "female" ? "female_long" : "male_textured";
-  return creatorAssetPath({gender,skin,hairColor,hairStyle:style});
-}
-
-function fallbackAssetPath(stage){
-return `${stages[stage].slug}.webp`;
-}
-
-function silhouettePath(stage){
-return `sil-${stages[stage].slug}.png`;
-}'''
-              new='''function normalizedGender(value){
-  return value === "female" ? "female" : "male";
-}
-
-function canonicalCharacterPath(gender,stage){
-  const safeGender = normalizedGender(gender);
-  const prefix = safeGender === "female" ? "female-" : "";
-  return `${prefix}${stages[stage].slug}.webp?v=canonical-masters-20260910`;
-}
-
-function assetPath(profile,stage){
-  return canonicalCharacterPath(profile?.avatar_gender,stage);
-}
-
-function creatorAssetPath(state=avatarDraft,style=state.hairStyle){
-  return canonicalCharacterPath(state?.gender,0);
-}
-
-function creatorFallbackPath(gender=avatarDraft.gender,skin=avatarDraft.skin,hairColor=avatarDraft.hairColor){
-  return canonicalCharacterPath(gender,0);
-}
-
-function fallbackAssetPath(stage,gender="male"){
-  return canonicalCharacterPath(gender,stage);
-}
-
-function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDraft.gender)){
-  const safeGender = normalizedGender(gender);
-  return `silhouettes/${safeGender}/${stages[stage].slug}.png?v=approved-silhouettes-20260910`;
-}'''
-              if old in s:
-                  s=s.replace(old,new,1)
-
-          s=s.replace('data-fallback="${fallbackAssetPath(i)}"','data-fallback="${fallbackAssetPath(i, profile?.avatar_gender)}"')
-          s=s.replace('src="${silhouettePath(i)}" alt=""','src="${silhouettePath(i, profile?.avatar_gender)}" alt=""')
-          s=s.replace('src="${silhouettePath(idx + 1)}" alt=""','src="${silhouettePath(idx + 1, profile?.avatar_gender)}" alt=""')
-
-          # Force the primary Offerwall file to bypass stale mobile browser caches.
-          s=s.replace('/offerwallgg-integration.js?v=1','/offerwallgg-integration.js?v=20260910-5')
-          s=s.replace('/offerwallgg-integration.js?v=20260910-4','/offerwallgg-integration.js?v=20260910-5')
-
-          # This loader is the production recovery layer for session/profile/mobile balance/art/games.
-          tag='<script src="/production-recovery-v3.js?v=20260910-5"></script>'
-          if 'production-recovery-v3.js' not in s:
+          tag='<script src="/runtime-stability-v4.js?v=20260910-runtime-v4"></script>'
+          if 'runtime-stability-v4.js' not in s:
               if '</body>' not in s:
                   raise SystemExit('Missing closing body tag')
               s=s.replace('</body>',tag+'\n</body>',1)
 
-          required=['production-recovery-v3.js','offerwallgg-integration.js?v=20260910-5','canonicalCharacterPath(gender,stage)']
+          # Ensure the recovery script itself is present too.
+          recovery='<script src="/production-recovery-v3.js?v=20260910-runtime-v4"></script>'
+          if 'production-recovery-v3.js' not in s:
+              s=s.replace('</body>',recovery+'\n</body>',1)
+
+          required=['runtime-stability-v4.js?v=20260910-runtime-v4','production-recovery-v3.js?v=20260910-runtime-v4','offerwallgg-integration.js?v=20260910-runtime-v4']
           for x in required:
               if x not in s:
-                  raise SystemExit(f'Missing invariant: {x}')
+                  raise SystemExit('Missing invariant: '+x)
           p.write_text(s,encoding='utf-8')
           PY
-
-      - name: Static regression checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -Fq 'production-recovery-v3.js?v=20260910-5' index.html
-          grep -Fq 'offerwallgg-integration.js?v=20260910-5' index.html
-          grep -Fq 'canonicalCharacterPath(gender,stage)' index.html
 
       - name: Commit production runtime fix
         shell: bash
@@ -135,6 +65,6 @@ function silhouettePath(stage,gender=(currentProfile?.avatar_gender || avatarDra
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Restore production session balance art and games'
+          git commit -m 'Load runtime stability v4 and refresh production scripts'
           git pull --rebase origin main
           git push origin HEAD:main
