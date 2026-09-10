@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if(window.__RL_ADMIN_DASHBOARD_STABLE__)return;
+  window.__RL_ADMIN_DASHBOARD_STABLE__=true;
 
   const OWNER_USER_ID = '51731c06-5dc8-4955-895d-f22343be526d';
   const fmtUsd = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'USD'}).format(Number(n||0));
@@ -9,8 +11,8 @@
   async function activeAuth() {
     try {
       if (typeof sb === 'undefined' || !sb?.auth) return { user:null, token:'' };
-      const [userResult, sessionResult] = await Promise.all([sb.auth.getUser(), sb.auth.getSession()]);
-      return { user:userResult?.data?.user || sessionResult?.data?.session?.user || null, token:sessionResult?.data?.session?.access_token || '' };
+      const sessionResult = await sb.auth.getSession();
+      return { user:sessionResult?.data?.session?.user || null, token:sessionResult?.data?.session?.access_token || '' };
     } catch (_) { return { user:null, token:'' }; }
   }
 
@@ -40,8 +42,7 @@
   async function probeAdmin(){
     const btn=mountButton(); const auth=await activeAuth(); const isOwner=String(auth.user?.id||'').toLowerCase()===OWNER_USER_ID;
     btn.style.display=isOwner?'block':'none'; btn.dataset.userId=auth.user?.id||''; if(!isOwner)return;
-    try{await adminFetch('/api/admin/summary'); btn.textContent='ADMINISTRATEUR'; btn.title='Accès administrateur vérifié';}
-    catch(err){btn.textContent='ADMINISTRATEUR ⚠'; btn.title=err?.code||'Contrôle administrateur à diagnostiquer';}
+    btn.textContent='ADMINISTRATEUR'; btn.title='Ouvrir le tableau de bord administrateur';
   }
 
   async function openDashboard(){
@@ -50,7 +51,7 @@
     catch(err){
       const auth=await activeAuth(); const uid=auth.user?.id||'aucun';
       if(err?.code==='admin-not-configured') alert(`Ton compte est bien détecté (${uid}), mais ADMIN_USER_ID n'est pas configuré dans le Worker.`);
-      else if(err?.code==='auth-server-unavailable') alert(`Ton compte est bien détecté (${uid}), mais la connexion serveur à Supabase n'est pas disponible dans le Worker. Vérifie SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY.`);
+      else if(err?.code==='auth-server-unavailable') alert(`Ton compte est bien détecté (${uid}), mais la connexion serveur à Supabase n'est pas disponible dans le Worker.`);
       else if(err?.code==='not-admin') alert(`Ton compte est bien détecté (${uid}), mais le ADMIN_USER_ID du Worker ne correspond pas à cet UUID.`);
       else if(err?.code==='not-authenticated') alert('Ta session Supabase active n\'a pas été retrouvée. Reconnecte-toi puis réessaie.');
       else alert(`Accès administrateur indisponible (${err?.body?.error || err?.status || err?.code || 'erreur inconnue'}).`);
@@ -67,8 +68,7 @@
   function card(label,value){return `<div style="background:#101521;border:1px solid #292f42;border-radius:16px;padding:16px"><div style="font-size:12px;color:#9da4b8;font-weight:800;text-transform:uppercase">${label}</div><div style="font-size:27px;font-weight:900;margin-top:8px">${value}</div></div>`}
   function escapeHtml(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]))}
 
-  const boot=()=>{setTimeout(probeAdmin,150);setTimeout(probeAdmin,800);};
+  const boot=()=>{setTimeout(probeAdmin,150);};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-  try{if(typeof sb!=='undefined'&&sb?.auth?.onAuthStateChange)sb.auth.onAuthStateChange(()=>setTimeout(probeAdmin,50));}catch(_){}
-  window.addEventListener('storage',()=>setTimeout(probeAdmin,100)); window.addEventListener('focus',()=>setTimeout(probeAdmin,100)); document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(probeAdmin,100);}); setInterval(probeAdmin,5000);
+  try{if(typeof sb!=='undefined'&&sb?.auth?.onAuthStateChange)sb.auth.onAuthStateChange((event)=>{if(event==='SIGNED_IN'||event==='SIGNED_OUT')setTimeout(probeAdmin,100);});}catch(_){}
 })();
