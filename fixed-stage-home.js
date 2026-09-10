@@ -107,5 +107,6 @@
 
   function apply(){mark();repairHome();repairSilhouettes();repairCreatorPreview();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
-  let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;apply();});}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});
+  // Stability v11: no global MutationObserver. A profile recovery can safely call this one-shot hook.
+  window.riselooterApplyFixedStageArt=apply;
 })();
