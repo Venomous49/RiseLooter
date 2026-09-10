@@ -82,7 +82,6 @@
       section.style.setProperty('display','block','important');
       section.style.setProperty('visibility','visible','important');
     }
-    // Reload the current Offerwall integration under a fresh URL so mobile browsers cannot reuse an old cached v=1 file.
     if(!document.querySelector('script[data-riselooter-offerwall-recovery]')){
       try{ window.__RISELOOTER_OFFERWALL_GG__=false; }catch(_){}
       const s=document.createElement('script');
@@ -93,10 +92,20 @@
     }
   }
 
+  function ensureDetailedHistory(){
+    if(document.querySelector('script[data-riselooter-history-detail]')) return;
+    const s=document.createElement('script');
+    s.src='/history-detail-v2.js?v=20260910-1';
+    s.defer=true;
+    s.dataset.riselooterHistoryDetail='1';
+    document.body.appendChild(s);
+  }
+
   async function recover(){
     const profile=await restoreProfile();
     if(profile){ syncBalance(profile); repairArt(profile); }
     ensureGamesVisible();
+    ensureDetailedHistory();
   }
 
   function boot(){
