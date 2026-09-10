@@ -12,7 +12,6 @@
   const silhouetteFor=(gender,stage)=>`/silhouettes/${normalizedGender(gender)}/${NAMES[Math.max(0,Math.min(Number(stage)||0,7))]}.png?v=${SIL_VERSION}`;
   const legacySilhouette=stage=>`/silhouettes/${NAMES[Math.max(0,Math.min(Number(stage)||0,7))]}.png`;
 
-  // renderProfile passes the actual profile to this function, so stage art is selected safely here.
   window.assetPath=fixedAssetPath;
 
   const style=document.createElement('style');
@@ -23,8 +22,10 @@
     #home .hero #mainCharacter .scene-clean-image.stage-art-clean{display:block!important;visibility:visible!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:68% 54%!important;opacity:1!important;padding:6px 8px 4px!important;box-sizing:border-box!important;transform:none!important;filter:none!important;animation:none!important;image-rendering:auto!important}
     .evolution-real.stage-art-clean{display:block!important;visibility:visible!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:center 54%!important;opacity:1!important;padding:3px!important;box-sizing:border-box!important;transform:none!important;filter:none!important;animation:none!important;image-rendering:auto!important}
     .evolution-card.locked .evolution-real.stage-art-clean{filter:brightness(0)!important;opacity:.86!important}
-    .evolution-card.locked .evolution-character,.shadow-character{background:#fff!important}
-    .evolution-silhouette,.next-silhouette{object-fit:contain!important;object-position:center bottom!important;background:#fff!important;filter:none!important;opacity:1!important}
+    .evolution-card.locked .evolution-character{background:#fff!important}
+    .evolution-silhouette{object-fit:contain!important;object-position:center bottom!important;background:#fff!important;filter:none!important;opacity:1!important}
+    #nextEvolutionShadow.shadow-character{background:#03090d!important;overflow:hidden!important}
+    #nextEvolutionShadow .next-silhouette{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;object-position:center 38%!important;background:#03090d!important;filter:none!important;opacity:1!important}
     #creatorPreview .creator-real-preview.rl-canonical-preview{object-fit:contain!important;object-position:center bottom!important;background:#03090d!important;padding:4px!important;box-sizing:border-box!important}
   `;
   document.head.appendChild(style);
@@ -83,11 +84,15 @@
       img.classList.add('evolution-silhouette');img.dataset.rlSilhouetteStage=String(i);
       img.onerror=()=>{const fallback=legacySilhouette(i);if((img.getAttribute('src')||'').includes(fallback))return;img.onerror=null;img.src=fallback;};
     });
+
     const next=document.querySelector('#nextEvolutionShadow img.next-silhouette');
     if(next){
-      const nextStage=Math.min(7,runtimeStage()+1);const wanted=silhouetteFor(gender,nextStage);
+      const nextStage=Math.min(7,runtimeStage()+1);
+      const wanted=gender==='female'?FEMALE_STAGE_ASSETS[nextStage]:MALE_STAGE_ASSETS[nextStage];
       if(!(next.getAttribute('src')||'').includes(wanted.split('?')[0]))next.src=wanted;
-      next.onerror=()=>{const fallback=legacySilhouette(nextStage);if((next.getAttribute('src')||'').includes(fallback))return;next.onerror=null;next.src=fallback;};
+      next.onerror=null;
+      next.alt='Prochaine évolution';
+      next.decoding='async';
     }
   }
 
