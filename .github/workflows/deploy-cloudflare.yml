@@ -3,6 +3,7 @@ name: Deploy RiseLooter to Cloudflare
 # Runtime-complete deployment trigger 2026-09-10
 # Stable Offerwall v8 deployment trigger 2026-09-10
 # Stability v10 direct deployment trigger 2026-09-10
+# Stability v11 non-recursive runtime direct deployment 2026-09-10
 on:
   push:
     branches: [main]
