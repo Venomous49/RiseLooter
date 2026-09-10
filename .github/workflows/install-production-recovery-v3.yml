@@ -1,0 +1,37 @@
+name: Install production recovery v3
+
+on:
+  push:
+    paths:
+      - '.github/workflows/install-production-recovery-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject recovery loader into production HTML
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          tag='<script src="/production-recovery-v3.js?v=20260910-4"></script>'
+          if tag not in s:
+              s=s.replace('</body>', tag+'\n</body>')
+          # Also cache-bust the primary Offerwall loader already present in the page.
+          s=s.replace('/offerwallgg-integration.js?v=1', '/offerwallgg-integration.js?v=20260910-4')
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name "RiseLooter Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "Recovery loader already installed"
+          else
+            git commit -m "Load production recovery and bust Offerwall cache"
+            git push origin HEAD:main
+          fi
