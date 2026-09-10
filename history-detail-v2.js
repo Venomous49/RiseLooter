@@ -1,8 +1,8 @@
-/* RiseLooter detailed histories v2: collapsed by default, exact game, RL and XP cross-linked. */
+/* RiseLooter detailed histories v2.1: collapsed by default, exact game, RL and XP cross-linked. One-shot only. */
 (() => {
   'use strict';
-  if (window.__RISELOOTER_HISTORY_DETAIL_V2__) return;
-  window.__RISELOOTER_HISTORY_DETAIL_V2__ = true;
+  if (window.__RISELOOTER_HISTORY_DETAIL_V21__) return;
+  window.__RISELOOTER_HISTORY_DETAIL_V21__ = true;
 
   const fmt=(n,max=2)=>Number(n||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:max});
   const date=v=>{try{return new Date(v).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return ''}};
@@ -11,9 +11,9 @@
   const txFromRlId=id=>String(id||'').replace(/^ow-rev-/,'').replace(/^ow-/,'');
 
   function installCss(){
-    if(document.getElementById('rl-history-detail-v2-style'))return;
+    if(document.getElementById('rl-history-detail-v21-style'))return;
     const st=document.createElement('style');
-    st.id='rl-history-detail-v2-style';
+    st.id='rl-history-detail-v21-style';
     st.textContent=`
       #xpHistoryPanel .xp-list,#rlHistoryPanel .rlh-list{display:none!important;grid-template-columns:1fr!important;gap:8px!important}
       #xpHistoryPanel.rl-history-open .xp-list,#rlHistoryPanel.rl-history-open .rlh-list{display:grid!important}
@@ -86,7 +86,7 @@
       xpList.innerHTML='';
       if(!xpHistory.length)xpList.innerHTML='<div class="rl-history-empty">Tes prochains gains d’XP apparaîtront ici.</div>';
       for(const x of xpHistory){
-        const game=resolveGame(x,maps); const xp=Number(x.amount||0); const rl=rlByTx.get(String(x.source_id||''))||Number(x.rl_amount||0)||0;
+        const game=resolveGame(x,maps), xp=Number(x.amount||0), rl=rlByTx.get(String(x.source_id||''))||Number(x.rl_amount||0)||0;
         const div=document.createElement('div');div.className='xp-item';
         div.innerHTML=`<div><div class="rl-history-game">${esc(game)}</div><div class="rl-history-desc">${esc(x.description||x.title||'Gain d’XP')} • ${esc(date(x.created_at))}</div><div class="rl-history-rewards"><span class="rl-history-chip xp">✨ ${xp>0?'+':''}${fmt(xp,0)} XP</span><span class="rl-history-chip coins">🪙 ${rl>0?'+':''}${fmt(rl)} RL Coins</span></div></div>`;
         xpList.appendChild(div);
@@ -98,7 +98,7 @@
       rlList.innerHTML='';
       if(!rlHistory.length)rlList.innerHTML='<div class="rl-history-empty">Tes prochains gains de RL Coins apparaîtront ici.</div>';
       for(const r of rlHistory){
-        const game=resolveGame(r,maps); const rl=Number(r.amount||0); const tx=txFromRlId(r.id); const xp=xpByTx.get(tx)??Number(r.xp_amount||0)??0;
+        const game=resolveGame(r,maps), rl=Number(r.amount||0), tx=txFromRlId(r.id), xp=xpByTx.get(tx)??Number(r.xp_amount||0)??0;
         const div=document.createElement('div');div.className='rlh-item';
         div.innerHTML=`<div><div class="rl-history-game">${esc(game)}</div><div class="rl-history-desc">${esc(r.description||r.title||'Gain de RL Coins')} • ${esc(date(r.created_at))}</div><div class="rl-history-rewards"><span class="rl-history-chip coins">🪙 ${rl>0?'+':''}${fmt(rl)} RL Coins</span><span class="rl-history-chip xp">✨ ${xp>0?'+':''}${fmt(xp,0)} XP</span></div></div>`;
         rlList.appendChild(div);
@@ -106,25 +106,21 @@
     }
   }
 
-  let running=false;
-  async function refresh(){
-    if(running)return; running=true;
-    try{
-      installCss();
-      const xpPanel=document.getElementById('xpHistoryPanel'),rlPanel=document.getElementById('rlHistoryPanel');
-      ensureToggle(xpPanel,'xp');ensureToggle(rlPanel,'rl');
-      const sess=await session();if(!sess?.user?.id)return;
-      const headers={authorization:'Bearer '+sess.access_token};
-      const [xpRes,rlRes,maps]=await Promise.all([
-        fetch('/api/xp/history',{headers,cache:'no-store'}).then(r=>r.json()).catch(()=>({history:[]})),
-        fetch('/api/rl/history',{headers,cache:'no-store'}).then(r=>r.json()).catch(()=>({history:[]})),
-        missionMap(sess.user.id)
-      ]);
-      renderRows(Array.isArray(xpRes.history)?xpRes.history:[],Array.isArray(rlRes.history)?rlRes.history:[],maps);
-      ensureToggle(document.getElementById('xpHistoryPanel'),'xp');ensureToggle(document.getElementById('rlHistoryPanel'),'rl');
-    }finally{running=false;}
+  let started=false;
+  async function refreshOnce(){
+    if(started)return; started=true;
+    installCss();
+    const xpPanel=document.getElementById('xpHistoryPanel'),rlPanel=document.getElementById('rlHistoryPanel');
+    ensureToggle(xpPanel,'xp');ensureToggle(rlPanel,'rl');
+    const sess=await session();if(!sess?.user?.id)return;
+    const headers={authorization:'Bearer '+sess.access_token};
+    const [xpRes,rlRes,maps]=await Promise.all([
+      fetch('/api/xp/history',{headers,cache:'no-store'}).then(r=>r.json()).catch(()=>({history:[]})),
+      fetch('/api/rl/history',{headers,cache:'no-store'}).then(r=>r.json()).catch(()=>({history:[]})),
+      missionMap(sess.user.id)
+    ]);
+    renderRows(Array.isArray(xpRes.history)?xpRes.history:[],Array.isArray(rlRes.history)?rlRes.history:[],maps);
   }
 
-  function boot(){refresh();setTimeout(refresh,700);setTimeout(refresh,1800);setTimeout(refresh,4000);window.addEventListener('pageshow',refresh);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});try{sb?.auth?.onAuthStateChange?.(()=>setTimeout(refresh,80))}catch(_){}}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refreshOnce,{once:true});else refreshOnce();
 })();
