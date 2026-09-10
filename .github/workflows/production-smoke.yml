@@ -43,17 +43,35 @@ jobs:
             ['tablet-landscape',1024,768],
             ['desktop',1366,768]
           ];
+          const SUPABASE_STUB=`
+          (()=>{
+            const makeChain=()=>{let p; p=new Proxy({}, {get(_t,k){if(k==='then')return (resolve)=>Promise.resolve({data:[],error:null}).then(resolve);return (..._a)=>p;}});return p;};
+            const client={
+              auth:{
+                getSession:async()=>({data:{session:null},error:null}),
+                onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),
+                signInWithPassword:async()=>({data:{session:null},error:null}),
+                signUp:async()=>({data:{session:null},error:null}),
+                updateUser:async()=>({data:{},error:null})
+              },
+              from:()=>makeChain(),
+              rpc:async()=>({data:null,error:null})
+            };
+            window.supabase={createClient:()=>client};
+          })();`;
           const browser=await chromium.launch({headless:true});
           let failed=false;
           for(const [name,width,height] of sizes){
             const page=await browser.newPage({viewport:{width,height}});
+            await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({status:200,contentType:'application/javascript',body:SUPABASE_STUB}));
             const errors=[];
             page.on('pageerror',e=>errors.push(String(e)));
             await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-            await page.waitForTimeout(4000);
+            await page.waitForTimeout(2500);
             const result=await page.evaluate(()=>{
-              const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0};
+              const vis=id=>{const e=document.getElementById(id);if(!e)return false;const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
               const box=document.getElementById('offerwallggContent');
+              const navButtons=[...document.querySelectorAll('nav button')];
               return {
                 overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
                 logo:!!document.querySelector('.logo'),
@@ -65,15 +83,16 @@ jobs:
                 evolution:!!document.getElementById('evolution'),
                 leaderboard:!!document.getElementById('leaderboard'),
                 referral:!!document.getElementById('referral'),
-                withdrawals:!!document.getElementById('withdrawals')
+                withdrawals:!!document.getElementById('withdrawals'),
+                navCount:navButtons.length,
+                navVisible:navButtons.filter(b=>{const s=getComputedStyle(b),r=b.getBoundingClientRect();return s.display!=='none'&&r.width>0}).length
               };
             });
             console.log(name,JSON.stringify(result),errors.length?errors:'');
-            if(result.overflow>3||!result.logo||!result.auth||!result.balance||!result.home||!result.games||result.gamesContent<10||!result.evolution||!result.leaderboard||!result.referral||!result.withdrawals||errors.length){failed=true;}
+            if(result.overflow>3||!result.logo||!result.auth||!result.balance||!result.home||!result.games||result.gamesContent<10||!result.evolution||!result.leaderboard||!result.referral||!result.withdrawals||result.navCount<5||result.navVisible<5||errors.length){failed=true;}
             await page.close();
           }
           await browser.close();
           if(failed)process.exit(1);
           JS
           cd /tmp && node smoke.mjs
-          # Audit run after Cloudflare production version b0a41f29-c9d8-44d4-ac6b-b039ee99d27a.
