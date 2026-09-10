@@ -209,7 +209,7 @@ function offerwallExactUserCoins(rawReward, payoutUsd, providerPerUsd, env) {
 
 function offerwallXpForCoins(value) {
   const coins = Math.max(0, Number(value || 0));
-  return Math.max(1, Math.ceil(coins));
+  return Math.max(20, Math.ceil(coins * 20));
 }
 
 function formatRlCoins(value) {
@@ -453,7 +453,7 @@ async function handleXpHistory(request, env) {
   return json({
     ok:true,
     daily_streak_xp:15,
-    xp_per_100_coins:100,
+    xp_per_100_coins:2000,
     history
   });
 }
