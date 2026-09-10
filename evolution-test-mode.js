@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if(window.__RL_EVOLUTION_TEST_STABLE__)return;
+  window.__RL_EVOLUTION_TEST_STABLE__=true;
   const LEVELS=[1,5,10,15,20,30,40,50];
   const NAMES=['Débutant','Débrouillard','Chasseur','Hustler','Pro','Élite','Cyber Looter','Rise Looter'];
   const MALE=['/01-debutant.webp','/05-debrouillard.webp','/10-chasseur.webp','/15-hustler.webp','/20-pro.webp','/30-elite.webp','/40-cyber-looter.webp','/50-rise-looter.webp'];
@@ -16,72 +18,22 @@
   modal.setAttribute('aria-hidden','true');
   modal.innerHTML=`<div class="rlet-wrap"><div class="rlet-top"><div><b>MODE TEST ÉVOLUTIONS</b><div style="opacity:.65;font-size:13px">Aucune donnée réelle n'est modifiée. Accès administrateur uniquement.</div></div><div><button class="rlet-btn" data-g="male">Homme</button> <button class="rlet-btn" data-g="female">Femme</button> <button class="rlet-btn" data-close>Quitter</button></div></div><div class="rlet-card"><div class="rlet-title" data-title></div><div class="rlet-sub" data-sub></div><div class="rlet-art"><img data-art alt="Évolution du personnage"></div><div class="rlet-survey"><b>Faux sondage test</b><div style="opacity:.7">Quel type de sondage préfères-tu ?</div><label><input type="radio" name="rlet-q" value="rapide"> Sondage rapide</label><label><input type="radio" name="rlet-q" value="opinion"> Sondage d’opinion</label><label><input type="radio" name="rlet-q" value="produit"> Sondage produit</label><div class="rlet-actions"><button class="rlet-btn" data-prev>← Évolution précédente</button><button class="rlet-btn" data-next>Valider le sondage + XP test →</button></div></div></div></div>`;
   document.body.appendChild(modal);
-
   const launch=document.createElement('button');
-  launch.id='rl-evo-launch';
-  launch.type='button';
-  launch.textContent='🧪 Tester les évolutions';
-  document.body.appendChild(launch);
+  launch.id='rl-evo-launch';launch.type='button';launch.textContent='🧪 Tester les évolutions';document.body.appendChild(launch);
   const q=s=>modal.querySelector(s);
 
-  function render(){
-    const arr=gender==='female'?FEMALE:MALE;
-    q('[data-art]').src=`${arr[stage]}?v=${ASSET_VERSION}&evolution-test=admin`;
-    q('[data-title]').textContent=`${NAMES[stage]} — Niveau ${LEVELS[stage]}`;
-    q('[data-sub]').textContent=`${gender==='female'?'Personnage féminin':'Personnage masculin'} • étape ${stage+1}/8`;
-    modal.querySelectorAll('[data-g]').forEach(b=>b.classList.toggle('active',b.dataset.g===gender));
-    q('[data-prev]').disabled=stage===0;
-    q('[data-next]').textContent=stage===7?'Revenir au début':'Valider le sondage + XP test →';
-  }
+  function render(){const arr=gender==='female'?FEMALE:MALE;q('[data-art]').src=`${arr[stage]}?v=${ASSET_VERSION}&evolution-test=admin`;q('[data-title]').textContent=`${NAMES[stage]} — Niveau ${LEVELS[stage]}`;q('[data-sub]').textContent=`${gender==='female'?'Personnage féminin':'Personnage masculin'} • étape ${stage+1}/8`;modal.querySelectorAll('[data-g]').forEach(b=>b.classList.toggle('active',b.dataset.g===gender));q('[data-prev]').disabled=stage===0;q('[data-next]').textContent=stage===7?'Revenir au début':'Valider le sondage + XP test →';}
+  async function getAdminState(){try{if(typeof sb==='undefined')return false;const sessionResult=await sb.auth.getSession();const token=sessionResult?.data?.session?.access_token;if(!token)return false;const res=await fetch('/api/admin/summary',{headers:{authorization:`Bearer ${token}`},cache:'no-store'});return res.ok;}catch(_){return false;}}
+  async function syncAdmin(){const ok=await getAdminState();isAdmin=ok;launch.style.display=ok?'block':'none';if(!ok&&modal.classList.contains('open')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');}}
 
-  async function getAdminState(){
-    try{
-      if(typeof sb==='undefined') return false;
-      const sessionResult=await sb.auth.getSession();
-      const token=sessionResult?.data?.session?.access_token;
-      if(!token) return false;
-      const res=await fetch('/api/admin/summary',{headers:{authorization:`Bearer ${token}`},cache:'no-store'});
-      return res.ok;
-    }catch(_){return false;}
-  }
-
-  async function syncAdmin(){
-    const ok=await getAdminState();
-    isAdmin=ok;
-    launch.style.display=ok?'block':'none';
-    if(!ok && modal.classList.contains('open')){
-      modal.classList.remove('open');
-      modal.setAttribute('aria-hidden','true');
-    }
-  }
-
-  launch.onclick=async()=>{
-    if(!isAdmin){await syncAdmin();if(!isAdmin)return;}
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden','false');
-    render();
-  };
+  launch.onclick=async()=>{if(!isAdmin){await syncAdmin();if(!isAdmin)return;}modal.classList.add('open');modal.setAttribute('aria-hidden','false');render();};
   q('[data-close]').onclick=()=>{modal.classList.remove('open');modal.setAttribute('aria-hidden','true');};
   modal.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{gender=b.dataset.g;stage=0;render();});
   q('[data-prev]').onclick=()=>{stage=Math.max(0,stage-1);render();};
-  q('[data-next]').onclick=()=>{
-    const picked=modal.querySelector('input[name="rlet-q"]:checked');
-    if(!picked){alert('Choisis une réponse au faux sondage pour simuler le gain d’XP.');return;}
-    stage=stage===7?0:stage+1;
-    modal.querySelectorAll('input[name="rlet-q"]').forEach(i=>i.checked=false);
-    render();
-  };
+  q('[data-next]').onclick=()=>{const picked=modal.querySelector('input[name="rlet-q"]:checked');if(!picked){alert('Choisis une réponse au faux sondage pour simuler le gain d’XP.');return;}stage=stage===7?0:stage+1;modal.querySelectorAll('input[name="rlet-q"]').forEach(i=>i.checked=false);render();};
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(syncAdmin,350),{once:true});else setTimeout(syncAdmin,350);
-  window.addEventListener('focus',()=>setTimeout(syncAdmin,100));
-  window.addEventListener('storage',()=>setTimeout(syncAdmin,100));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(syncAdmin,100);});
+  try{if(typeof sb!=='undefined'&&sb?.auth?.onAuthStateChange)sb.auth.onAuthStateChange((event)=>{if(event==='SIGNED_IN'||event==='SIGNED_OUT')setTimeout(syncAdmin,150);});}catch(_){}
 
-  if(!document.querySelector('script[data-username-guard]')){
-    const guard=document.createElement('script');
-    guard.src='/username-guard.js?v=unique-v1';
-    guard.defer=true;
-    guard.dataset.usernameGuard='1';
-    document.body.appendChild(guard);
-  }
+  if(!document.querySelector('script[data-username-guard]')){const guard=document.createElement('script');guard.src='/username-guard.js?v=stability-v13';guard.defer=true;guard.dataset.usernameGuard='1';document.body.appendChild(guard);}
 })();
