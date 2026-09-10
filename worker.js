@@ -1,12 +1,12 @@
 class RiseLooterHead {
   element(element) {
     element.append('<link rel="stylesheet" href="/creator-hd.css?v=23">', { html: true });
-    element.append('<script src="/creator-cache-v23.js?v=27" defer></script>', { html: true });
+    element.append('<script src="/creator-cache-v23.js?v=stability-v13" defer></script>', { html: true });
     element.append('<script src="/safe-ui-bootstrap.js?v=base-hq-realesrgan-v2" defer></script>', { html: true });
     element.append('<script src="/fixed-stage-home.js?v=stability-v11" defer></script>', { html: true });
     element.append('<script src="/silhouette-stage-locks.js?v=stability-v11" defer></script>', { html: true });
-    element.append('<script src="/evolution-test-mode.js?v=no-surveys-1" defer></script>', { html: true });
-    element.append('<script src="/admin-dashboard.js?v=admin-v1" defer></script>', { html: true });
+    element.append('<script src="/evolution-test-mode.js?v=stability-v13" defer></script>', { html: true });
+    element.append('<script src="/admin-dashboard.js?v=stability-v13" defer></script>', { html: true });
   }
 }
 

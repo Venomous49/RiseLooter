@@ -4161,14 +4161,6 @@ $("headerCoins").textContent =
 
 renderStreakDays(0);
 
-await Promise.all(
-[
-loadMissions("all"),
-loadShop(),
-loadInventory()
-]
-);
-
 return;
 
 }
@@ -4246,16 +4238,8 @@ $("creatorModal")
 
 }
 
-await Promise.all(
-[
-loadMissions("all"),
-loadShop(),
-loadInventory(),
-loadLeaderboard(),
-loadReferralSummary(),
-loadWithdrawals()
-]
-);
+// Stability v13: secondary sections are loaded only when requested.
+// The initial page load only restores the authenticated profile and visible dashboard.
 
 }
 
@@ -4285,14 +4269,12 @@ block:"start"
 
 }
 
-if(
-btn.dataset.nav ===
-"leaderboard"
-){
-
-loadLeaderboard();
-
-}
+if(btn.dataset.nav === "leaderboard") loadLeaderboard();
+if(btn.dataset.nav === "missions") loadMissions("all");
+if(btn.dataset.nav === "referral") loadReferralSummary();
+if(btn.dataset.nav === "withdrawals") loadWithdrawals();
+if(btn.dataset.nav === "shop") loadShop();
+if(btn.dataset.nav === "inventory") loadInventory();
 
 };
 
@@ -4469,10 +4451,7 @@ setupChoiceGroup(
 "hairColor"
 );
 
-renderHairChoices();
-
-updateCreatorPreview();
-
+// Creator assets are initialized only if the creator modal is actually needed.
 renderTrack(1);
 
 renderStreakDays(0);
@@ -4523,6 +4502,6 @@ if(new URLSearchParams(location.search).get('creatorTest') === '1'){
 </script>
 
 <script src="/offerwallgg-stable-v8.js?v=20260910-missions-v8"></script>
-<script src="/production-recovery-v3.js?v=20260910-stable-v10"></script>
+<script src="/production-recovery-v3.js?v=20260910-stable-v13"></script>
 </body>
 </html>

@@ -68,6 +68,8 @@
       if(error||!data) return;
       try{currentUser=session.user;currentProfile=data;}catch(_){}
       syncProfile(data);
+      try{window.riselooterApplyFixedStageArt?.();}catch(_){}
+      try{window.riselooterSyncStageSilhouettes?.();}catch(_){}
     }catch(_){}
   }
 
@@ -75,7 +77,7 @@
     installCss();
     recoverOnce();
     if(!document.querySelector('script[data-riselooter-history-detail]')){
-      const s=document.createElement('script');s.src='/history-detail-v2.js?v=stable-v8';s.defer=true;s.dataset.riselooterHistoryDetail='1';document.body.appendChild(s);
+      const s=document.createElement('script');s.src='/history-detail-v2.js?v=stable-v13';s.defer=true;s.dataset.riselooterHistoryDetail='1';document.body.appendChild(s);
     }
   }
 
