@@ -555,20 +555,33 @@ async function handleOfferwallGgMissions(request, env) {
   const guard = await requireUser(request, env);
   if (!guard.ok) return guard.response;
 
-  const [missionsRes, txRes] = await Promise.all([
+  const [missionsRes, txRes, completionsRes] = await Promise.all([
     supabase(env,
       'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
-      '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps&order=last_opened_at.desc&limit=50'
+      '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,click_url,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps,last_goal_id&order=last_opened_at.desc&limit=50'
     ),
     supabase(env,
       'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +
       '&credited=eq.true&reversed=eq.false&select=reward_coins_exact,reward_coins,xp_awarded,created_at&order=created_at.asc&limit=500'
+    ),
+    supabase(env,
+      'offerwall_mission_completions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=offer_id,offer_name,goal_id,transaction_id,reward_coins_exact,xp_awarded,status,completed_at&order=completed_at.asc&limit=1000'
     )
   ]);
   if (!missionsRes.ok) return json({ok:false,error:'missions unavailable'},500);
 
   const missions = await missionsRes.json();
   const txs = txRes.ok ? await txRes.json() : [];
+  const completions = completionsRes.ok ? await completionsRes.json() : [];
+  const completionByOffer = new Map();
+  for (const row of completions) {
+    const key=String(row.offer_id || '');
+    if(!key) continue;
+    const list=completionByOffer.get(key) || [];
+    list.push(row);
+    completionByOffer.set(key,list);
+  }
 
   // Compatibility fallback for conversions made before direct mission-progress
   // tracking existed: attach them to the most recently opened mission within 6h.
@@ -606,7 +619,9 @@ async function handleOfferwallGgMissions(request, env) {
         earned_coins:useDirect ? directCoins : old.coins,
         earned_xp:useDirect ? directXp : old.xp,
         completed_steps:useDirect ? directSteps : old.steps,
-        last_reward_at:m.last_reward_at || old.last_reward_at || null
+        last_reward_at:m.last_reward_at || old.last_reward_at || null,
+        completed_goal_ids:(completionByOffer.get(String(m.offer_id)) || []).filter(x=>x.status==='credited').map(x=>String(x.goal_id)),
+        completion_details:(completionByOffer.get(String(m.offer_id)) || [])
       };
     })
   });
@@ -691,6 +706,25 @@ async function handleOfferwallGgPostback(request, env) {
         })
       }
     ).catch(()=>{});
+  }
+
+  if (mission && goalId) {
+    await supabase(env, 'offerwall_mission_completions?on_conflict=user_id,transaction_id', {
+      method:'POST',
+      headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify([{
+        user_id:userId,
+        offer_id:String(mission.offer_id),
+        offer_name:String(offerName || mission.offer_name || 'Jeu rémunéré').slice(0,300),
+        goal_id:String(goalId).slice(0,300),
+        transaction_id:String(txId).slice(0,500),
+        reward_coins_exact:Number(exactRewardCoins.toFixed(6)),
+        xp_awarded:Math.max(0,Number(xpDelta||0)),
+        status:providerStatus==='1'?'credited':'reversed',
+        completed_at:new Date().toISOString(),
+        updated_at:new Date().toISOString()
+      }])
+    }).catch(()=>{});
   }
 
   return new Response('OK', { status:200 });
