@@ -1,0 +1,44 @@
+name: Emergency stop startup refresh loop
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/emergency-stop-refresh-loop.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove eager startup work only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old='''await Promise.all(\n[\nloadMissions("all"),\nloadShop(),\nloadInventory()\n]\n);'''
+          if old not in s: raise SystemExit('unauth eager block not found')
+          s=s.replace(old,'/* Startup intentionally idle: sections load on demand. */',1)
+          old='''await Promise.all(\n[\nloadMissions("all"),\nloadShop(),\nloadInventory(),\nloadLeaderboard(),\nloadReferralSummary(),\nloadWithdrawals()\n]\n);'''
+          if old not in s: raise SystemExit('auth eager block not found')
+          s=s.replace(old,'/* Startup intentionally idle: sections load on demand. */',1)
+          old='''renderHairChoices();\n\nupdateCreatorPreview();\n\nrenderTrack(1);'''
+          if old not in s: raise SystemExit('creator startup block not found')
+          s=s.replace(old,'renderTrack(1);',1)
+          # Make every section load only when its existing nav button is clicked.
+          needle='''if(\nbtn.dataset.nav ===\n"leaderboard"\n){\n\nloadLeaderboard();\n\n}\n'''
+          repl='''const lazyLoaders = {\n  leaderboard: () => loadLeaderboard(),\n  missions: () => loadMissions("all"),\n  referral: () => loadReferralSummary(),\n  withdrawals: () => loadWithdrawals(),\n  shop: () => loadShop(),\n  inventory: () => loadInventory()\n};\nif(lazyLoaders[btn.dataset.nav]){ lazyLoaders[btn.dataset.nav](); }\n'''
+          if needle not in s: raise SystemExit('nav loader block not found')
+          s=s.replace(needle,repl,1)
+          p.write_text(s)
+          PY
+          git diff --check
+          grep -q 'Startup intentionally idle' index.html
+      - name: Commit repair
+        run: |
+          git config user.name 'Venomous49'
+          git config user.email 'marin.iglesias@hotmail.fr'
+          git add index.html
+          git commit -m 'Stop eager startup refresh loop while preserving features'
+          git push
