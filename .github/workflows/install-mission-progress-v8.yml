@@ -1,0 +1,58 @@
+name: Install exact mission progress v8
+on:
+  push:
+    paths:
+      - '.github/workflows/install-mission-progress-v8.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch worker mission tracking
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text(encoding='utf-8')
+          old="""  const [missionsRes, txRes] = await Promise.all([\n    supabase(env,\n      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +\n      '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps&order=last_opened_at.desc&limit=50'\n    ),\n    supabase(env,\n      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +\n      '&credited=eq.true&reversed=eq.false&select=reward_coins_exact,reward_coins,xp_awarded,created_at&order=created_at.asc&limit=500'\n    )\n  ]);"""
+          new="""  const [missionsRes, txRes, completionsRes] = await Promise.all([\n    supabase(env,\n      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +\n      '&status=eq.active&select=offer_id,offer_name,requirements,reward_display,device_label,click_url,started_at,last_opened_at,last_reward_at,earned_coins_exact,earned_xp,completed_steps,last_goal_id&order=last_opened_at.desc&limit=50'\n    ),\n    supabase(env,\n      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +\n      '&credited=eq.true&reversed=eq.false&select=reward_coins_exact,reward_coins,xp_awarded,created_at&order=created_at.asc&limit=500'\n    ),\n    supabase(env,\n      'offerwall_mission_completions?user_id=eq.' + encodeURIComponent(guard.user.id) +\n      '&select=offer_id,offer_name,goal_id,transaction_id,reward_coins_exact,xp_awarded,status,completed_at&order=completed_at.asc&limit=1000'\n    )\n  ]);"""
+          if old not in s: raise SystemExit('missions Promise block not found')
+          s=s.replace(old,new,1)
+          old2="""  const missions = await missionsRes.json();\n  const txs = txRes.ok ? await txRes.json() : [];"""
+          new2="""  const missions = await missionsRes.json();\n  const txs = txRes.ok ? await txRes.json() : [];\n  const completions = completionsRes.ok ? await completionsRes.json() : [];\n  const completionByOffer = new Map();\n  for (const row of completions) {\n    const key=String(row.offer_id || '');\n    if(!key) continue;\n    const list=completionByOffer.get(key) || [];\n    list.push(row);\n    completionByOffer.set(key,list);\n  }"""
+          if old2 not in s: raise SystemExit('missions parse block not found')
+          s=s.replace(old2,new2,1)
+          old3="""        completed_steps:useDirect ? directSteps : old.steps,\n        last_reward_at:m.last_reward_at || old.last_reward_at || null"""
+          new3="""        completed_steps:useDirect ? directSteps : old.steps,\n        last_reward_at:m.last_reward_at || old.last_reward_at || null,\n        completed_goal_ids:(completionByOffer.get(String(m.offer_id)) || []).filter(x=>x.status==='credited').map(x=>String(x.goal_id)),\n        completion_details:(completionByOffer.get(String(m.offer_id)) || [])"""
+          if old3 not in s: raise SystemExit('missions map block not found')
+          s=s.replace(old3,new3,1)
+          anchor="""  if (mission) {\n    const nextCoins = Math.max(0, Number(mission.earned_coins_exact || 0) + coinDelta);"""
+          if anchor not in s: raise SystemExit('postback mission anchor not found')
+          # Insert completion ledger after the mission patch block, immediately before OK response.
+          marker="""  return new Response('OK', { status:200 });\n}"""
+          insert="""  if (mission && goalId) {\n    await supabase(env, 'offerwall_mission_completions?on_conflict=user_id,transaction_id', {\n      method:'POST',\n      headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},\n      body:JSON.stringify([{\n        user_id:userId,\n        offer_id:String(mission.offer_id),\n        offer_name:String(offerName || mission.offer_name || 'Jeu rémunéré').slice(0,300),\n        goal_id:String(goalId).slice(0,300),\n        transaction_id:String(txId).slice(0,500),\n        reward_coins_exact:Number(exactRewardCoins.toFixed(6)),\n        xp_awarded:Math.max(0,Number(xpDelta||0)),\n        status:providerStatus==='1'?'credited':'reversed',\n        completed_at:new Date().toISOString(),\n        updated_at:new Date().toISOString()\n      }])\n    }).catch(()=>{});\n  }\n\n  return new Response('OK', { status:200 });\n}"""
+          if marker not in s: raise SystemExit('postback return marker not found')
+          s=s.replace(marker,insert,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Verify worker patch
+        run: |
+          grep -q 'offerwall_mission_completions' worker.js
+          grep -q 'completed_goal_ids' worker.js
+          grep -q 'click_url' worker.js
+      - name: Commit worker patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Track exact Offerwall goal completion progress'
+          git pull --rebase origin main
+          git push origin HEAD:main
