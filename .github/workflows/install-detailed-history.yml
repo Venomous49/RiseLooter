@@ -1,0 +1,239 @@
+name: Install detailed XP and RL histories
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/install-detailed-history.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch history APIs and UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # ---------- worker.js: enrich XP/RL history with exact game names and both rewards ----------
+          p=Path('worker.js')
+          s=p.read_text(encoding='utf-8')
+          start=s.index('async function handleRlHistory(request, env) {')
+          end=s.index('async function handleOfferwallGgExactBalance(request, env) {')
+          new=r'''async function handleRlHistory(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [offerwallRes, legacyRes, missionsRes] = await Promise.all([
+    supabase(env,
+      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=transaction_id,offer_id,status,reward_coins_exact,reward_coins,xp_awarded,credited,reversed,created_at&order=created_at.desc&limit=100'
+    ),
+    supabase(env,
+      'lootix_transactions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&status=eq.confirmed&select=id,amount,source_type,source_id,description,created_at&order=created_at.desc&limit=100'
+    ),
+    supabase(env,
+      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=offer_id,offer_name,last_network_offer_id,last_goal_id,requirements,reward_display,last_reward_at&limit=200'
+    )
+  ]);
+
+  if (!offerwallRes.ok || !legacyRes.ok) return json({ok:false,error:'rl history unavailable'},500);
+
+  const offerwall = await offerwallRes.json();
+  const legacy = await legacyRes.json();
+  const missions = missionsRes.ok ? await missionsRes.json() : [];
+  const missionByNetwork = new Map();
+  const missionByOffer = new Map();
+  for (const m of missions || []) {
+    if (m.last_network_offer_id) missionByNetwork.set(String(m.last_network_offer_id), m);
+    if (m.offer_id) missionByOffer.set(String(m.offer_id), m);
+  }
+  const history = [];
+
+  for (const tx of offerwall) {
+    const exact = Number(tx.reward_coins_exact ?? tx.reward_coins ?? 0);
+    const mission = missionByNetwork.get(String(tx.offer_id || '')) || missionByOffer.get(String(tx.offer_id || '')) || null;
+    const gameName = mission?.offer_name || (tx.offer_id ? ('Jeu / offre ' + tx.offer_id) : 'Jeu rémunéré');
+    const xp = Number(tx.xp_awarded || 0);
+    if (tx.credited && !tx.reversed) {
+      history.push({
+        id:'ow-'+tx.transaction_id,
+        amount:exact,
+        xp_amount:xp,
+        source_type:'offerwall_mission',
+        source_id:tx.transaction_id,
+        offer_id:tx.offer_id || null,
+        game_name:gameName,
+        title:gameName,
+        description:'Mission de jeu validée',
+        created_at:tx.created_at
+      });
+    } else if (tx.reversed) {
+      history.push({
+        id:'ow-rev-'+tx.transaction_id,
+        amount:-Math.abs(exact),
+        xp_amount:xp ? -Math.abs(xp) : 0,
+        source_type:'offerwall_reversal',
+        source_id:tx.transaction_id,
+        offer_id:tx.offer_id || null,
+        game_name:gameName,
+        title:gameName,
+        description:'Récompense annulée',
+        created_at:tx.created_at
+      });
+    }
+  }
+
+  for (const tx of legacy) {
+    const amount = Number(tx.amount || 0);
+    if (!amount) continue;
+    history.push({
+      id:'lt-'+tx.id,
+      amount,
+      xp_amount:null,
+      source_type:tx.source_type || 'reward',
+      source_id:tx.source_id || null,
+      game_name:null,
+      title:tx.source_type === 'daily_chest' ? 'Coffre quotidien' : 'Gain de RL Coins',
+      description:tx.description || '',
+      created_at:tx.created_at
+    });
+  }
+
+  history.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  return json({ok:true,history:history.slice(0,100)});
+}
+
+async function handleXpHistory(request, env) {
+  const guard = await requireUser(request, env);
+  if (!guard.ok) return guard.response;
+
+  const [xpRes, txRes, missionsRes] = await Promise.all([
+    supabase(env,
+      'xp_history?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=id,amount,source_type,source_id,title,description,created_at&order=created_at.desc&limit=100'
+    ),
+    supabase(env,
+      'partner_reward_transactions?provider=eq.offerwallgg&user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=transaction_id,offer_id,reward_coins_exact,reward_coins,xp_awarded,credited,reversed,created_at&order=created_at.desc&limit=200'
+    ),
+    supabase(env,
+      'offerwall_active_missions?user_id=eq.' + encodeURIComponent(guard.user.id) +
+      '&select=offer_id,offer_name,last_network_offer_id,last_goal_id,requirements,reward_display,last_reward_at&limit=200'
+    )
+  ]);
+  if (!xpRes.ok) return json({ok:false,error:'xp history unavailable'},500);
+
+  const history = await xpRes.json();
+  const txs = txRes.ok ? await txRes.json() : [];
+  const missions = missionsRes.ok ? await missionsRes.json() : [];
+  const txById = new Map((txs || []).map(t => [String(t.transaction_id || ''), t]));
+  const missionByNetwork = new Map();
+  const missionByOffer = new Map();
+  for (const m of missions || []) {
+    if (m.last_network_offer_id) missionByNetwork.set(String(m.last_network_offer_id), m);
+    if (m.offer_id) missionByOffer.set(String(m.offer_id), m);
+  }
+
+  const enriched = (history || []).map(x => {
+    if (x.source_type !== 'offerwall_mission') return {...x, rl_amount:0, game_name:null};
+    const tx = txById.get(String(x.source_id || '')) || null;
+    let rawOffer = tx?.offer_id || '';
+    if (!rawOffer && typeof x.description === 'string') {
+      const m = x.description.match(/Offre\s+(.+)$/i);
+      if (m) rawOffer = m[1].trim();
+    }
+    const mission = missionByNetwork.get(String(rawOffer)) || missionByOffer.get(String(rawOffer)) || null;
+    const gameName = mission?.offer_name || (rawOffer ? ('Jeu / offre ' + rawOffer) : 'Jeu rémunéré');
+    return {
+      ...x,
+      game_name:gameName,
+      title:gameName,
+      description:'Mission de jeu validée',
+      offer_id:rawOffer || null,
+      rl_amount:Number(tx?.reward_coins_exact ?? tx?.reward_coins ?? 0)
+    };
+  });
+
+  return json({
+    ok:true,
+    daily_streak_xp:15,
+    xp_per_100_coins:2000,
+    history:enriched
+  });
+}
+
+'''
+          s=s[:start]+new+s[end:]
+          p.write_text(s,encoding='utf-8')
+
+          # ---------- offerwallgg-integration.js: collapsible panels + full detailed history ----------
+          p=Path('offerwallgg-integration.js')
+          s=p.read_text(encoding='utf-8')
+
+          s=s.replace("#xpHistoryPanel .xp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}",
+                      "#xpHistoryPanel .xp-list{display:none;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px} #xpHistoryPanel.history-open .xp-list{display:grid}")
+          s=s.replace("#rlHistoryPanel .rlh-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}",
+                      "#rlHistoryPanel .rlh-list{display:none;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px} #rlHistoryPanel.history-open .rlh-list{display:grid}")
+          marker="      .streak-xp-note{margin-top:6px;color:#c575ff;font-size:12px;font-weight:900}\n"
+          add="""      .history-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #304455;background:#0b1520;color:#fff;border-radius:10px;padding:11px 13px;margin:4px 0 10px;font-size:12px;font-weight:900;cursor:pointer;text-align:left}\n      .history-toggle .history-chevron{transition:transform .18s ease;font-size:16px;color:#c575ff}\n      .history-open .history-toggle .history-chevron{transform:rotate(180deg)}\n      .history-rewards{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px;font-size:11px;font-weight:900}\n      .history-rl{color:#63e6a3}.history-xp{color:#c575ff}\n      .streak-xp-note{margin-top:6px;color:#c575ff;font-size:12px;font-weight:900}\n"""
+          if marker in s: s=s.replace(marker,add,1)
+
+          old="""    section.innerHTML='<div class=\"rlh-head\"><div class=\"rlh-title\">🪙 Historique RL Coins</div><div class=\"rlh-sub\">Tes gains et éventuelles annulations de récompenses.</div></div><div class=\"rlh-list\"><div class=\"rlh-empty\">Tes prochains gains de RL Coins apparaîtront ici.</div></div>';"""
+          new="""    section.innerHTML='<div class=\"rlh-head\"><div class=\"rlh-title\">🪙 Historique RL Coins</div><div class=\"rlh-sub\">Tes gains et éventuelles annulations de récompenses.</div></div><button type=\"button\" class=\"history-toggle\" aria-expanded=\"false\"><span>Voir tout l’historique des RL Coins</span><span class=\"history-chevron\">⌄</span></button><div class=\"rlh-list\"><div class=\"rlh-empty\">Tes prochains gains de RL Coins apparaîtront ici.</div></div>';\n    section.querySelector('.history-toggle')?.addEventListener('click',()=>{const open=section.classList.toggle('history-open');const b=section.querySelector('.history-toggle');b?.setAttribute('aria-expanded',open?'true':'false');const t=b?.querySelector('span:first-child');if(t)t.textContent=open?'Masquer l’historique des RL Coins':'Voir tout l’historique des RL Coins';});"""
+          if old not in s: raise SystemExit('RL section marker not found')
+          s=s.replace(old,new,1)
+
+          old="""    section.innerHTML='<div class=\"xp-head\"><div class=\"xp-title\">✨ Historique XP</div><div class=\"xp-rule\">XP proportionnel : 100 XP / 100 RL Coins • Série : +15 XP/jour</div></div><div class=\"xp-list\"><div class=\"xp-empty\">Tes prochains gains d’XP apparaîtront ici.</div></div>';"""
+          new="""    section.innerHTML='<div class=\"xp-head\"><div class=\"xp-title\">✨ Historique XP</div><div class=\"xp-rule\">XP proportionnel : 2 000 XP / 100 RL Coins • Série : +15 XP/jour</div></div><button type=\"button\" class=\"history-toggle\" aria-expanded=\"false\"><span>Voir tout l’historique XP</span><span class=\"history-chevron\">⌄</span></button><div class=\"xp-list\"><div class=\"xp-empty\">Tes prochains gains d’XP apparaîtront ici.</div></div>';\n    section.querySelector('.history-toggle')?.addEventListener('click',()=>{const open=section.classList.toggle('history-open');const b=section.querySelector('.history-toggle');b?.setAttribute('aria-expanded',open?'true':'false');const t=b?.querySelector('span:first-child');if(t)t.textContent=open?'Masquer l’historique XP':'Voir tout l’historique XP';});"""
+          if old not in s: raise SystemExit('XP section marker not found')
+          s=s.replace(old,new,1)
+
+          old="""        desc.textContent=(x.description?x.description+' • ':'')+formatRlHistoryDate(x.created_at);\n        left.append(title,desc);\n\n        const amount=document.createElement('div');\n        const n=Number(x.amount||0);\n        amount.className='rlh-item-amount'+(n<0?' negative':'');\n        amount.textContent=(n>0?'+':'')+n.toLocaleString('fr-FR',{minimumFractionDigits:Math.abs(n)<1?2:0,maximumFractionDigits:2})+' RL';\n\n        item.append(left,amount);"""
+          new="""        desc.textContent=(x.description?x.description+' • ':'')+formatRlHistoryDate(x.created_at);\n        const rewards=document.createElement('div');\n        rewards.className='history-rewards';\n        const n=Number(x.amount||0);\n        const xp=Number(x.xp_amount||0);\n        rewards.innerHTML='<span class=\"history-rl\">🪙 '+(n>0?'+':'')+n.toLocaleString('fr-FR',{minimumFractionDigits:Math.abs(n)<1?2:0,maximumFractionDigits:2})+' RL Coins</span><span class=\"history-xp\">✨ '+(xp>0?'+':'')+xp.toLocaleString('fr-FR')+' XP</span>';\n        left.append(title,desc,rewards);\n\n        item.append(left);"""
+          if old not in s: raise SystemExit('RL renderer marker not found')
+          s=s.replace(old,new,1)
+
+          old="""      history.slice(0,12).forEach(x=>{"""
+          s=s.replace(old,"""      history.forEach(x=>{""",2)
+
+          old="""        desc.textContent=(x.description?x.description+' • ':'')+formatXpHistoryDate(x.created_at);\n        left.append(title,desc);\n        const amount=document.createElement('div');\n        amount.className='xp-item-amount'+(Number(x.amount)<0?' negative':'');\n        amount.textContent=(Number(x.amount)>0?'+':'')+Number(x.amount).toLocaleString('fr-FR')+' XP';\n        item.append(left,amount);"""
+          new="""        desc.textContent=(x.description?x.description+' • ':'')+formatXpHistoryDate(x.created_at);\n        const rewards=document.createElement('div');\n        rewards.className='history-rewards';\n        const xp=Number(x.amount||0);\n        const rl=Number(x.rl_amount||0);\n        rewards.innerHTML='<span class=\"history-xp\">✨ '+(xp>0?'+':'')+xp.toLocaleString('fr-FR')+' XP</span><span class=\"history-rl\">🪙 '+(rl>0?'+':'')+rl.toLocaleString('fr-FR',{minimumFractionDigits:Math.abs(rl)<1&&rl!==0?2:0,maximumFractionDigits:2})+' RL Coins</span>';\n        left.append(title,desc,rewards);\n        item.append(left);"""
+          if old not in s: raise SystemExit('XP renderer marker not found')
+          s=s.replace(old,new,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Static regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "xp_per_100_coins:2000" worker.js
+          grep -Fq "last_network_offer_id" worker.js
+          grep -Fq "history-open" offerwallgg-integration.js
+          grep -Fq "Voir tout l’historique XP" offerwallgg-integration.js
+          grep -Fq "history.forEach(x=>" offerwallgg-integration.js
+
+      - name: Commit detailed history implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'RiseLooter Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add worker.js offerwallgg-integration.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Show detailed collapsible XP and RL histories'
+          git pull --rebase origin main
+          git push origin HEAD:main
