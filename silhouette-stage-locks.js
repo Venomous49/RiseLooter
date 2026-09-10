@@ -31,5 +31,6 @@
   }
   function sync(){restoreUnlocked();apply();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync,{once:true});else sync();
-  let q=false;new MutationObserver(()=>{if(q)return;q=true;requestAnimationFrame(()=>{q=false;sync();})}).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['class','src']});
+  // Stability v11: one-shot synchronization only; no recursive global observer.
+  window.riselooterSyncStageSilhouettes=sync;
 })();
