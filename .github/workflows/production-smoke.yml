@@ -1,5 +1,6 @@
 name: Production smoke tests
 
+# Fresh production verification after stability v13 — 2026-09-10
 on:
   workflow_dispatch:
   push:
