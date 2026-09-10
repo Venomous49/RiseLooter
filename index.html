@@ -1770,7 +1770,7 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   }
   removeSurveys();
-  new MutationObserver(removeSurveys).observe(document.body,{childList:true,subtree:true});
+  /* one-shot only: global DOM observer removed to prevent render storms */
 });
 </script>
 </head>
@@ -4523,6 +4523,6 @@ if(new URLSearchParams(location.search).get('creatorTest') === '1'){
 </script>
 
 <script src="/offerwallgg-stable-v8.js?v=20260910-missions-v8"></script>
-<script src="/production-recovery-v3.js?v=20260910-stable-v9"></script>
+<script src="/production-recovery-v3.js?v=20260910-stable-v10"></script>
 </body>
 </html>
