@@ -19,34 +19,35 @@ jobs:
           grep -q 'handleOfferwallGgOffers' worker.js
           ! grep -q 'worker-full-runtime.js' worker.js
           grep -q '__RL_OW_STABLE_V83__' offerwallgg-stable-v8.js
-          grep -q "typeof sb!=='undefined'" offerwallgg-stable-v8.js
           grep -q 'Voir les missions' offerwall-ui-enhancements-v1.js
-          ! grep -q 'setInterval' offerwall-ui-enhancements-v1.js
-          ! grep -q 'MutationObserver' offerwall-ui-enhancements-v1.js
-      - name: Wire additive UI directly in page
+          grep -q '__RL_DAILY_STREAK_UI_V1__' daily-streak-ui-v1.js
+          ! grep -q 'setInterval' daily-streak-ui-v1.js
+          ! grep -q 'MutationObserver' daily-streak-ui-v1.js
+      - name: Wire streak UI only
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import re
           p=Path('index.html'); s=p.read_text()
-          tag='<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v4" defer></script>'
-          if 'offerwall-ui-enhancements-v1.js' not in s:
+          tag='<script src="/daily-streak-ui-v1.js?v=20260911-v1" defer></script>'
+          if 'daily-streak-ui-v1.js' not in s:
               if '</body>' not in s: raise SystemExit('body anchor missing')
               s=s.replace('</body>',tag+'\n</body>',1)
           else:
-              s=re.sub(r'<script src="/offerwall-ui-enhancements-v1\.js\?v=[^"]+" defer></script>',tag,s,count=1)
+              s=re.sub(r'<script src="/daily-streak-ui-v1\.js\?v=[^"]+" defer></script>',tag,s,count=1)
           p.write_text(s)
           PY
+          grep -q 'daily-streak-ui-v1.js?v=20260911-v1' index.html
           grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v4' index.html
           grep -q 'id="headerCoins"' index.html
           grep -q 'id="missions"' index.html
-      - name: Commit only page wiring
+      - name: Commit page wiring
         run: |
           git config user.name 'RiseLooter Automation'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Wire French detailed game missions safely'
+          git diff --cached --quiet || git commit -m 'Show progressive daily streak XP and remove daily challenges UI'
           git push
       - name: Deploy
         env:
@@ -58,11 +59,11 @@ jobs:
           set -euo pipefail
           for i in 1 2 3 4 5; do
             curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home
-            if grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v4' /tmp/home; then break; fi
+            if grep -q 'daily-streak-ui-v1.js?v=20260911-v1' /tmp/home; then break; fi
             sleep 3
           done
+          grep -q 'daily-streak-ui-v1.js?v=20260911-v1' /tmp/home
           grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v4' /tmp/home
-          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v4' -o /tmp/ui
-          grep -q 'Voir les missions' /tmp/ui
-          grep -q 'RL Coins' /tmp/ui
-          grep -q 'coin-pill' /tmp/ui
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/daily-streak-ui-v1.js?v=20260911-v1' -o /tmp/streak
+          grep -q '25,50,100,150,200' /tmp/streak
+          grep -q "getElementById('challenges')" /tmp/streak
