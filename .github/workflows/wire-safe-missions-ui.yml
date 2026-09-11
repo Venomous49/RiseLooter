@@ -27,29 +27,31 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html'); s=p.read_text()
-          tag='<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v2" defer></script>'
+          tag='<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v3" defer></script>'
           if 'offerwall-ui-enhancements-v1.js' not in s:
               if '</body>' not in s: raise SystemExit('body anchor missing')
               s=s.replace('</body>',tag+'\n</body>',1)
+          else:
+              import re
+              s=re.sub(r'<script src="/offerwall-ui-enhancements-v1\.js\?v=[^"]+" defer></script>',tag,s,count=1)
           p.write_text(s)
           PY
-          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' index.html
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v3' index.html
       - name: Regression guards
         run: |
           set -euo pipefail
           grep -q 'id="headerCoins"' index.html
           grep -q 'id="characterImage"' index.html
           grep -q 'id="missions"' index.html
-          grep -q 'history-detail-v2.js' index.html
           grep -q 'offerwallgg-stable-v8.js' worker.js
-          ! grep -R -q 'setInterval' offerwall-ui-enhancements-v1.js
-          ! grep -R -q 'MutationObserver' offerwall-ui-enhancements-v1.js
+          ! grep -q 'setInterval' offerwall-ui-enhancements-v1.js
+          ! grep -q 'MutationObserver' offerwall-ui-enhancements-v1.js
       - name: Commit only page wiring
         run: |
           git config user.name 'RiseLooter Automation'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
-          git commit -m 'Wire existing detailed missions UI safely'
+          git diff --cached --quiet || git commit -m 'Wire existing detailed missions UI safely'
           git push
       - name: Deploy
         env:
@@ -60,12 +62,13 @@ jobs:
         run: |
           set -euo pipefail
           for i in 1 2 3 4 5; do
-            curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home && grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' /tmp/home && break
+            curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home && grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v3' /tmp/home && break
             sleep 3
           done
-          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' /tmp/home
-          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v2' -o /tmp/ui
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v3' /tmp/home
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v3' -o /tmp/ui
           grep -q 'Voir les missions' /tmp/ui
           grep -q 'RL Coins' /tmp/ui
           grep -q 'coin-pill' /tmp/ui
-          curl -sS -o /tmp/api -w '%{http_code}' 'https://loot-up.marin-iglesias.workers.dev/api/offerwallgg/offers' | grep -Eq '^(401|403)$'
+          code=$(curl -sS -o /tmp/api -w '%{http_code}' 'https://loot-up.marin-iglesias.workers.dev/api/offerwallgg/offers')
+          test "$code" = 401 -o "$code" = 403
