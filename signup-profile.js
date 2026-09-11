@@ -6,7 +6,7 @@
   const $ = id => document.getElementById(id);
   const KNOWN_KEY = 'riselooter_known_account_v1';
   const inputStyle = 'width:100%;padding:11px 12px;margin:6px 0 11px;border:1px solid #293b4b;border-radius:8px;background:#050a0f;color:#fff;box-sizing:border-box';
-  let mode = 'signup';
+  let mode = 'login';
   let usernameTimer = 0;
 
   const knownAccount = () => {
@@ -44,16 +44,16 @@
     wrap.style.cssText = 'display:block;position:relative;padding:4px 0';
     wrap.innerHTML = `
       <button type="button" id="riseAuthClose" aria-label="Fermer" style="position:absolute;right:-4px;top:-8px;border:0;background:transparent;color:#99a4b0;font-size:24px;line-height:1;cursor:pointer">×</button>
-      <h2 id="riseAuthTitle" style="margin:0 34px 6px 0">Créer ton compte</h2>
-      <div id="riseAuthSubtitle" class="muted" style="font-size:13px;margin-bottom:14px">Crée ton profil RiseLooter une seule fois.</div>
+      <h2 id="riseAuthTitle" style="margin:0 34px 6px 0">Se connecter</h2>
+      <div id="riseAuthSubtitle" class="muted" style="font-size:13px;margin-bottom:14px">Entre simplement ton e-mail et ton mot de passe.</div>
 
       <label for="riseAuthEmail">E-mail</label>
       <input id="riseAuthEmail" type="email" autocomplete="email" inputmode="email" style="${inputStyle}" placeholder="ton@email.fr">
 
       <label for="riseAuthPassword">Mot de passe</label>
-      <input id="riseAuthPassword" type="password" autocomplete="new-password" style="${inputStyle}" placeholder="Ton mot de passe">
+      <input id="riseAuthPassword" type="password" autocomplete="current-password" style="${inputStyle}" placeholder="Ton mot de passe">
 
-      <div id="riseSignupFields">
+      <div id="riseSignupFields" style="display:none">
         <label for="riseAuthUsername">Pseudo RiseLooter</label>
         <input id="riseAuthUsername" maxlength="20" autocomplete="nickname" style="${inputStyle}" placeholder="3 à 20 caractères">
         <div id="riseUsernameStatus" class="muted" style="font-size:12px;margin:-6px 0 11px">Ce pseudo sera affiché dans le classement.</div>
@@ -76,8 +76,8 @@
         <input id="riseAuthZip" maxlength="12" autocomplete="postal-code" inputmode="numeric" style="${inputStyle}" placeholder="Ex. 49330">
       </div>
 
-      <button type="button" id="riseAuthPrimary" class="btn" style="width:100%;margin-top:4px">Créer mon compte</button>
-      <button type="button" id="riseAuthSwitch" style="display:block;margin:12px auto 0;border:0;background:transparent;color:#bd7dff;cursor:pointer;font-size:12px;font-weight:800">J’ai déjà un compte sur un autre appareil</button>
+      <button type="button" id="riseAuthPrimary" class="btn" style="width:100%;margin-top:4px">Se connecter</button>
+      <button type="button" id="riseAuthSwitch" style="display:block;margin:12px auto 0;border:0;background:transparent;color:#bd7dff;cursor:pointer;font-size:12px;font-weight:800">Nouveau sur RiseLooter ? Créer un compte</button>
       <div id="riseAuthStatus" class="muted" style="font-size:12px;margin-top:10px;min-height:16px;text-align:center"></div>
     `;
     root.appendChild(wrap);
@@ -114,7 +114,7 @@
       if (title) title.textContent = 'Créer ton compte';
       if (subtitle) subtitle.textContent = 'Crée ton profil RiseLooter une seule fois.';
       if (primary) primary.textContent = 'Créer mon compte';
-      if (switcher) switcher.textContent = 'J’ai déjà un compte sur un autre appareil';
+      if (switcher) switcher.textContent = 'J’ai déjà un compte';
       if (password) password.autocomplete = 'new-password';
     }
     updateHeaderAuthLabel();
@@ -122,14 +122,14 @@
 
   function updateHeaderAuthLabel(session){
     if (session?.user) return;
-    const wanted = knownAccount() || mode === 'login' ? 'Se connecter' : 'Créer un compte';
+    const wanted = mode === 'signup' ? 'Créer un compte' : 'Se connecter';
     document.querySelectorAll('header button, header a, .header-right button, .header-right a').forEach(el => {
       const t = String(el.textContent || '').trim().toLowerCase();
       if (t.includes('créer un compte') || t.includes('creer un compte') || t === 'se connecter' || t === 'connexion') {
         el.textContent = wanted;
         if (!el.dataset.riseAuthModeBound) {
           el.dataset.riseAuthModeBound = '1';
-          el.addEventListener('click', () => setMode(knownAccount() ? 'login' : mode));
+          el.addEventListener('click', () => setMode('login'));
         }
       }
     });
@@ -265,7 +265,7 @@
 
     ensureUnifiedUI();
     const restored = await restoreSession();
-    if (!restored) setMode(knownAccount() ? 'login' : 'signup');
+    if (!restored) setMode('login');
 
     try {
       sb.auth.onAuthStateChange((event,session) => {
@@ -280,7 +280,6 @@
       });
     } catch (_) {}
 
-    // Re-apply label after the legacy UI finishes its own startup render.
     setTimeout(()=>updateHeaderAuthLabel(),500);
     setTimeout(()=>updateHeaderAuthLabel(),1500);
   }
