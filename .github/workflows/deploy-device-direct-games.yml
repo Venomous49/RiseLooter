@@ -17,29 +17,32 @@ jobs:
           set -euo pipefail
           grep -q 'offerwallgg-stable-v8.js' index.html
           grep -q 'daily-streak-ui-v1.js' index.html
-          grep -q '__RL_OW_DEVICE_DIRECT_V1__' offerwall-device-direct-v1.js
-          ! grep -Eq 'setInterval[[:space:]]*\(' offerwall-device-direct-v1.js
-          ! grep -Eq 'new[[:space:]]+MutationObserver' offerwall-device-direct-v1.js
-      - name: Wire additive launcher
+          grep -q '__RL_OW_DEVICE_FILTER_V2__' offerwall-device-direct-v1.js
+          grep -q 'Voir les missions' offerwall-ui-enhancements-v1.js
+          grep -q 'loadLeaderboard' leaderboard-recovery-v1.js
+          ! grep -q 'innerHTML=' offerwall-device-direct-v1.js
+          ! grep -Eq 'setInterval|MutationObserver' offerwall-device-direct-v1.js
+      - name: Wire recovery scripts
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
           p=Path('index.html'); s=p.read_text()
-          tag='<script src="/offerwall-device-direct-v1.js?v=20260911-v1" defer></script>'
-          if 'offerwall-device-direct-v1.js' not in s:
-              s=s.replace('</body>',tag+'\n</body>',1)
-          else:
-              s=re.sub(r'<script src="/offerwall-device-direct-v1\.js\?v=[^"]+" defer></script>',tag,s,count=1)
+          s=re.sub(r'<script src="/offerwall-device-direct-v1\.js\?v=[^"]+" defer></script>','<script src="/offerwall-device-direct-v1.js?v=20260911-v2" defer></script>',s,count=1)
+          s=re.sub(r'<script src="/offerwall-ui-enhancements-v1\.js\?v=[^"]+" defer></script>','<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v5" defer></script>',s,count=1)
+          tag='<script src="/leaderboard-recovery-v1.js?v=20260911-v1" defer></script>'
+          if 'leaderboard-recovery-v1.js' not in s:s=s.replace('</body>',tag+'\n</body>',1)
           p.write_text(s)
           PY
-          grep -q 'offerwall-device-direct-v1.js?v=20260911-v1' index.html
-      - name: Commit page wiring
+          grep -q 'offerwall-device-direct-v1.js?v=20260911-v2' index.html
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v5' index.html
+          grep -q 'leaderboard-recovery-v1.js?v=20260911-v1' index.html
+      - name: Commit wiring
         run: |
           git config user.name 'RiseLooter Automation'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Enable device targeted direct game launch'
+          git diff --cached --quiet || git commit -m 'Restore game missions and leaderboard UI'
           git push
       - name: Deploy Cloudflare
         env:
@@ -49,12 +52,9 @@ jobs:
       - name: Verify production
         run: |
           set -euo pipefail
-          for i in 1 2 3 4 5; do
-            curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home
-            grep -q 'offerwall-device-direct-v1.js?v=20260911-v1' /tmp/home && break
-            sleep 3
-          done
-          grep -q 'offerwall-device-direct-v1.js?v=20260911-v1' /tmp/home
-          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-device-direct-v1.js?v=20260911-v1' -o /tmp/device
-          grep -q 'Compatible' /tmp/device
-          grep -q 'Commencer' /tmp/device
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home
+          grep -q 'offerwall-device-direct-v1.js?v=20260911-v2' /tmp/home
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v5' /tmp/home
+          grep -q 'leaderboard-recovery-v1.js?v=20260911-v1' /tmp/home
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v5' | grep -q 'Voir les missions'
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/leaderboard-recovery-v1.js?v=20260911-v1' | grep -q 'loadLeaderboard'
