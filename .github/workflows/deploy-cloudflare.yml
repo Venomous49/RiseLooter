@@ -14,6 +14,7 @@ on:
       - 'silhouette-stage-locks.js'
       - 'production-recovery-v3.js'
       - 'offerwallgg-stable-v8.js'
+      - 'offerwall-ui-enhancements-v1.js'
       - 'history-detail-v2.js'
       - 'evolution-test-mode.js'
       - 'admin-dashboard.js'
@@ -41,6 +42,17 @@ jobs:
           sed -i 's#safe-ui-bootstrap.js?v=stability-v13#safe-ui-bootstrap.js?v=stability-v14#g' worker.js || true
           sed -E -i 's#username-guard\.js\?v=[A-Za-z0-9._-]+#username-guard.js?v=stability-v14#g' index.html || true
           grep -F 'safe-ui-bootstrap.js?v=stability-v14' worker.js
+      - name: Verify Offerwall missions and rewards
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'Voir les missions' offerwall-ui-enhancements-v1.js
+          grep -F 'RL Coins' offerwall-ui-enhancements-v1.js
+          grep -F 'XP=20' offerwall-ui-enhancements-v1.js
+          grep -F 'Atteindre le niveau' offerwall-ui-enhancements-v1.js
+          grep -F 'handleOfferwallGgMissions' worker.js
+          grep -F 'offerwall_mission_completions' worker.js
+          grep -F 'xp_per_100_coins:2000' worker.js
       - name: Verify Cloudflare token
         shell: bash
         run: |
