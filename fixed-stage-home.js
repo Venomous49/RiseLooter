@@ -19,7 +19,7 @@
   style.textContent=`
     #home .hero #mainCharacter{display:block!important;visibility:visible!important;opacity:1!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;overflow:hidden!important;z-index:1!important}
     #home .hero #mainCharacter .character-scene-clean{display:block!important;visibility:visible!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;overflow:hidden!important}
-    #home .hero #mainCharacter .scene-clean-image.stage-art-clean{display:block!important;visibility:visible!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:68% 54%!important;opacity:1!important;padding:6px 8px 4px!important;box-sizing:border-box!important;transform:none!important;filter:none!important;animation:none!important;image-rendering:auto!important}
+    #home .hero #mainCharacter .scene-clean-image.stage-art-clean{display:block!important;visibility:visible!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:50% 50%!important;opacity:1!important;padding:6px 8px 4px!important;box-sizing:border-box!important;transform:none!important;filter:none!important;animation:none!important;image-rendering:auto!important}
     .evolution-real.stage-art-clean{display:block!important;visibility:visible!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:center 54%!important;opacity:1!important;padding:3px!important;box-sizing:border-box!important;transform:none!important;filter:none!important;animation:none!important;image-rendering:auto!important}
     .evolution-card.locked .evolution-real.stage-art-clean{filter:brightness(0)!important;opacity:.86!important}
     .evolution-card.locked .evolution-character{background:#fff!important}
@@ -107,6 +107,5 @@
 
   function apply(){mark();repairHome();repairSilhouettes();repairCreatorPreview();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
-  // Stability v11: no global MutationObserver. A profile recovery can safely call this one-shot hook.
   window.riselooterApplyFixedStageArt=apply;
 })();
