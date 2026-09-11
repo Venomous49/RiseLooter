@@ -10,6 +10,8 @@ on:
       - 'offerwallgg-stable-v8.js'
       - 'production-recovery-v3.js'
       - 'history-detail-v2.js'
+      - 'fixed-stage-home.js'
+      - 'ui-cleanup-v1.js'
       - '.github/workflows/deploy-final-rewards.yml'
   workflow_dispatch:
 
@@ -20,17 +22,22 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Verify restored rewards build
+      - name: Verify current rewards build
         run: |
-          grep -q 'handleOfferwallGgMissions' worker.js
+          set -e
+          grep -q 'handleOfferwallGGMissions' worker.js
           grep -q 'offerwall_mission_completions' worker.js
-          grep -q 'xp_per_100_coins:2000' worker.js
-          grep -q '20260910-detailed-v82' worker.js
+          grep -q 'handleXpHistory' worker.js
+          grep -q 'handleRlHistory' worker.js
           grep -q 'Missions en cours' offerwallgg-stable-v8.js
           grep -q 'Jeux rémunérés' offerwallgg-stable-v8.js
           grep -q 'headerCoinsEuro' production-recovery-v3.js
           grep -q 'xpHistoryPanel' production-recovery-v3.js
           grep -q 'rlHistoryPanel' production-recovery-v3.js
+          grep -q 'object-position:50% 50%' fixed-stage-home.js
+          grep -q "getElementById('missions')" ui-cleanup-v1.js
+          grep -q 'ui-cleanup-v1.js?v=20260911-v1' worker.js
+          grep -q 'fixed-stage-home.js?v=20260911-fullbody-v2' worker.js
       - name: Deploy to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -39,12 +46,18 @@ jobs:
       - name: Verify production assets
         run: |
           set -e
-          curl -fsSL --retry 5 --retry-delay 3 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home.html
-          curl -fsSL --retry 5 --retry-delay 3 'https://loot-up.marin-iglesias.workers.dev/offerwallgg-stable-v8.js?v=20260910-detailed-v82' -o /tmp/offerwall.js
-          curl -fsSL --retry 5 --retry-delay 3 'https://loot-up.marin-iglesias.workers.dev/production-recovery-v3.js?v=20260910-rewards-v34' -o /tmp/recovery.js
-          grep -q '20260910-detailed-v82' /tmp/home.html
+          BASE='https://loot-up.riselooter.workers.dev'
+          curl -fsSL --retry 5 --retry-delay 3 "$BASE/" -o /tmp/home.html
+          curl -fsSL --retry 5 --retry-delay 3 "$BASE/offerwallgg-stable-v8.js?v=20260911-session-v83" -o /tmp/offerwall.js
+          curl -fsSL --retry 5 --retry-delay 3 "$BASE/production-recovery-v3.js?v=20260910-rewards-v34" -o /tmp/recovery.js
+          curl -fsSL --retry 5 --retry-delay 3 "$BASE/fixed-stage-home.js?v=20260911-fullbody-v2" -o /tmp/stage.js
+          curl -fsSL --retry 5 --retry-delay 3 "$BASE/ui-cleanup-v1.js?v=20260911-v1" -o /tmp/cleanup.js
+          grep -q 'fixed-stage-home.js?v=20260911-fullbody-v2' /tmp/home.html
+          grep -q 'ui-cleanup-v1.js?v=20260911-v1' /tmp/home.html
           grep -q 'Missions en cours' /tmp/offerwall.js
           grep -q 'Jeux rémunérés' /tmp/offerwall.js
           grep -q 'headerCoinsEuro' /tmp/recovery.js
           grep -q 'xpHistoryPanel' /tmp/recovery.js
           grep -q 'rlHistoryPanel' /tmp/recovery.js
+          grep -q 'object-position:50% 50%' /tmp/stage.js
+          grep -q "getElementById('missions')" /tmp/cleanup.js
