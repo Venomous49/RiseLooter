@@ -6,5 +6,5 @@ function schedule(){[0,700,1600,3000,5000,8000].forEach(x=>setTimeout(run,x))}fu
 (()=>{if(document.querySelector('script[data-rl-unified-auth]'))return;const s=document.createElement('script');s.src='/signup-profile.js?v=20260911-login-fix3';s.defer=true;s.dataset.rlUnifiedAuth='1';document.head.appendChild(s)})();
 /* Additive creator simplifier: only gender remains visible; no reward/game logic is touched. */
 (()=>{if(document.querySelector('script[data-rl-gender-only]'))return;const s=document.createElement('script');s.src='/creator-gender-only-v1.js?v=20260911-v1';s.defer=true;s.dataset.rlGenderOnly='1';document.head.appendChild(s)})();
-/* Additive device guard: filters incompatible offers after the stable Offerwall has rendered. */
-(()=>{if(document.querySelector('script[data-rl-device-guard]'))return;const s=document.createElement('script');s.src='/offerwall-device-safe-v3.js?v=20260911-v3';s.defer=true;s.dataset.rlDeviceGuard='1';document.head.appendChild(s)})();
+/* Additive Offerwall guard: filters incompatible devices and known ineligible offers after stable render. */
+(()=>{if(document.querySelector('script[data-rl-device-guard]'))return;const s=document.createElement('script');s.src='/offerwall-device-safe-v3.js?v=20260911-v4';s.defer=true;s.dataset.rlDeviceGuard='1';document.head.appendChild(s)})();
