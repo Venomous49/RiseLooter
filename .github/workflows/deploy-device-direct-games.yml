@@ -18,31 +18,31 @@ jobs:
           grep -q 'offerwallgg-stable-v8.js' index.html
           grep -q 'daily-streak-ui-v1.js' index.html
           grep -q '__RL_OW_DEVICE_FILTER_V2__' offerwall-device-direct-v1.js
+          grep -q '__RL_OW_UI_ENHANCE_V12__' offerwall-ui-enhancements-v1.js
+          grep -q 'orientation:portrait' offerwall-ui-enhancements-v1.js
           grep -q 'Voir les missions' offerwall-ui-enhancements-v1.js
           grep -q 'loadLeaderboard' leaderboard-recovery-v1.js
-          ! grep -q 'innerHTML=' offerwall-device-direct-v1.js
           ! grep -Eq 'setInterval|MutationObserver' offerwall-device-direct-v1.js
-      - name: Wire recovery scripts
+          ! grep -Eq 'setInterval|MutationObserver' offerwall-ui-enhancements-v1.js
+      - name: Wire only cache-busted UI asset
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
           p=Path('index.html'); s=p.read_text()
-          s=re.sub(r'<script src="/offerwall-device-direct-v1\.js\?v=[^"]+" defer></script>','<script src="/offerwall-device-direct-v1.js?v=20260911-v2" defer></script>',s,count=1)
-          s=re.sub(r'<script src="/offerwall-ui-enhancements-v1\.js\?v=[^"]+" defer></script>','<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v5" defer></script>',s,count=1)
-          tag='<script src="/leaderboard-recovery-v1.js?v=20260911-v1" defer></script>'
-          if 'leaderboard-recovery-v1.js' not in s:s=s.replace('</body>',tag+'\n</body>',1)
+          s=re.sub(r'<script src="/offerwall-ui-enhancements-v1\.js\?v=[^"]+" defer></script>','<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v6" defer></script>',s,count=1)
           p.write_text(s)
           PY
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v6' index.html
           grep -q 'offerwall-device-direct-v1.js?v=20260911-v2' index.html
-          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v5' index.html
           grep -q 'leaderboard-recovery-v1.js?v=20260911-v1' index.html
+          grep -q 'daily-streak-ui-v1.js' index.html
       - name: Commit wiring
         run: |
           git config user.name 'RiseLooter Automation'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Restore game missions and leaderboard UI'
+          git diff --cached --quiet || git commit -m 'Show French missions and portrait coin pot'
           git push
       - name: Deploy Cloudflare
         env:
@@ -53,8 +53,10 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v6' /tmp/home
           grep -q 'offerwall-device-direct-v1.js?v=20260911-v2' /tmp/home
-          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v5' /tmp/home
           grep -q 'leaderboard-recovery-v1.js?v=20260911-v1' /tmp/home
-          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v5' | grep -q 'Voir les missions'
-          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/leaderboard-recovery-v1.js?v=20260911-v1' | grep -q 'loadLeaderboard'
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v6' -o /tmp/ui
+          grep -q 'orientation:portrait' /tmp/ui
+          grep -q 'Télécharger le jeu' /tmp/ui
+          grep -q 'Voir les missions' /tmp/ui
