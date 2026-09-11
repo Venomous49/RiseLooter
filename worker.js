@@ -9,6 +9,7 @@ class RiseLooterHead {
     element.append('<script src="/admin-dashboard.js?v=stability-v13" defer></script>', { html: true });
     element.append('<script src="/offerwallgg-stable-v8.js?v=20260911-session-v83" defer></script>', { html: true });
     element.append('<script src="/production-recovery-v3.js?v=20260910-rewards-v34" defer></script>', { html: true });
+    element.append('<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v1" defer></script>', { html: true });
   }
 }
 
