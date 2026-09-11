@@ -1,0 +1,52 @@
+name: Deploy additive game mission UI
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/deploy-offerwall-ui-enhancement.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Add enhancement script to existing worker only
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js'); s=p.read_text()
+          anchor='    element.append(\'<script src="/production-recovery-v3.js?v=20260910-rewards-v34" defer></script>\', { html: true });'
+          add=anchor+'\n    element.append(\'<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v1" defer></script>\', { html: true });'
+          if 'offerwall-ui-enhancements-v1.js' not in s:
+              if anchor not in s: raise SystemExit('safe injection anchor missing')
+              s=s.replace(anchor,add,1)
+          p.write_text(s)
+          PY
+          grep -q 'handleOfferwallGgOffers' worker.js
+          grep -q 'offerwall_mission_completions' worker.js
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v1' worker.js
+          ! grep -q 'worker-full-runtime.js' worker.js
+      - name: Commit only worker injection
+        run: |
+          git config user.name 'RiseLooter Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add worker.js
+          git commit -m 'Load additive French game mission details UI'
+          git push
+      - name: Deploy unchanged runtime plus additive UI
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy
+      - name: Verify production assets
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-delay 3 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home
+          curl -fsSL --retry 5 --retry-delay 3 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v1' -o /tmp/ui
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v1' /tmp/home
+          grep -q 'Voir les missions' /tmp/ui
+          grep -q 'RL Coins' /tmp/ui
+          grep -q 'coin-pill' /tmp/ui
