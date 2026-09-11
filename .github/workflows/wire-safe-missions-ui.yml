@@ -1,0 +1,71 @@
+name: Wire safe missions UI
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/wire-safe-missions-ui.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  wire-deploy-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Safety baseline
+        run: |
+          set -euo pipefail
+          grep -q 'offerwall_mission_completions' worker.js
+          grep -q 'handleOfferwallGgOffers' worker.js
+          ! grep -q 'worker-full-runtime.js' worker.js
+          grep -q '__RL_OW_STABLE_V83__' offerwallgg-stable-v8.js
+          grep -q "typeof sb!=='undefined'" offerwallgg-stable-v8.js
+          grep -q 'Voir les missions' offerwall-ui-enhancements-v1.js
+      - name: Wire additive UI directly in page
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text()
+          tag='<script src="/offerwall-ui-enhancements-v1.js?v=20260911-v2" defer></script>'
+          if 'offerwall-ui-enhancements-v1.js' not in s:
+              if '</body>' not in s: raise SystemExit('body anchor missing')
+              s=s.replace('</body>',tag+'\n</body>',1)
+          p.write_text(s)
+          PY
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' index.html
+      - name: Regression guards
+        run: |
+          set -euo pipefail
+          grep -q 'id="headerCoins"' index.html
+          grep -q 'id="characterImage"' index.html
+          grep -q 'id="missions"' index.html
+          grep -q 'history-detail-v2.js' index.html
+          grep -q 'offerwallgg-stable-v8.js' worker.js
+          ! grep -R -q 'setInterval' offerwall-ui-enhancements-v1.js
+          ! grep -R -q 'MutationObserver' offerwall-ui-enhancements-v1.js
+      - name: Commit only page wiring
+        run: |
+          git config user.name 'RiseLooter Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Wire existing detailed missions UI safely'
+          git push
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy
+      - name: Verify production wiring and assets
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/' -o /tmp/home && grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' /tmp/home && break
+            sleep 3
+          done
+          grep -q 'offerwall-ui-enhancements-v1.js?v=20260911-v2' /tmp/home
+          curl -fsSL 'https://loot-up.marin-iglesias.workers.dev/offerwall-ui-enhancements-v1.js?v=20260911-v2' -o /tmp/ui
+          grep -q 'Voir les missions' /tmp/ui
+          grep -q 'RL Coins' /tmp/ui
+          grep -q 'coin-pill' /tmp/ui
+          curl -sS -o /tmp/api -w '%{http_code}' 'https://loot-up.marin-iglesias.workers.dev/api/offerwallgg/offers' | grep -Eq '^(401|403)$'
