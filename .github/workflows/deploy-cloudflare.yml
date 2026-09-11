@@ -1,6 +1,6 @@
 name: Deploy RiseLooter to Cloudflare
 
-# Stability v14 auth-runtime deployment
+# Stability v15 exact-balance deployment
 on:
   push:
     branches: [main]
@@ -34,22 +34,23 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Apply V14 cache keys in deploy workspace
+      - name: Apply V15 cache keys in deploy workspace
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's#safe-ui-bootstrap.js?v=base-hq-realesrgan-v2#safe-ui-bootstrap.js?v=stability-v14#g' worker.js
-          sed -i 's#safe-ui-bootstrap.js?v=stability-v13#safe-ui-bootstrap.js?v=stability-v14#g' worker.js || true
-          sed -E -i 's#username-guard\.js\?v=[A-Za-z0-9._-]+#username-guard.js?v=stability-v14#g' index.html || true
-          grep -F 'safe-ui-bootstrap.js?v=stability-v14' worker.js
-      - name: Verify Offerwall missions and rewards
+          sed -E -i 's#safe-ui-bootstrap\.js\?v=[A-Za-z0-9._-]+#safe-ui-bootstrap.js?v=stability-v15#g' worker.js
+          sed -E -i 's#username-guard\.js\?v=[A-Za-z0-9._-]+#username-guard.js?v=stability-v15#g' index.html || true
+          grep -F 'safe-ui-bootstrap.js?v=stability-v15' worker.js
+      - name: Verify exact balance and Offerwall runtime
         shell: bash
         run: |
           set -euo pipefail
+          grep -F 'syncExactBalance' safe-ui-bootstrap.js
+          grep -F '/api/offerwallgg/balance' safe-ui-bootstrap.js
+          grep -F 'handleOfferwallGgExactBalance' worker.js
           grep -F 'Voir les missions' offerwall-ui-enhancements-v1.js
           grep -F 'RL Coins' offerwall-ui-enhancements-v1.js
           grep -F 'XP=20' offerwall-ui-enhancements-v1.js
-          grep -F 'Atteindre le niveau' offerwall-ui-enhancements-v1.js
           grep -F 'handleOfferwallGgMissions' worker.js
           grep -F 'offerwall_mission_completions' worker.js
           grep -F 'xp_per_100_coins:2000' worker.js
@@ -59,6 +60,6 @@ jobs:
           set -euo pipefail
           curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify > /tmp/userverify.json
           node -e "const d=require('/tmp/userverify.json'); process.exit(d.success?0:1)"
-      - name: Deploy V14 to Cloudflare
+      - name: Deploy V15 to Cloudflare
         shell: bash
         run: npx --yes wrangler@4 deploy
