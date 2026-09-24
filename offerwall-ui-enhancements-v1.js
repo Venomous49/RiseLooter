@@ -8,3 +8,42 @@ function schedule(){[0,700,1600,3000,5000,8000].forEach(x=>setTimeout(run,x))}fu
 (()=>{if(document.querySelector('script[data-rl-gender-only]'))return;const s=document.createElement('script');s.src='/creator-gender-only-v1.js?v=20260911-v2';s.defer=true;s.dataset.rlGenderOnly='1';document.head.appendChild(s)})();
 /* Additive Offerwall guard v5: strict iOS/Android/Desktop eligibility before launch. */
 (()=>{if(document.querySelector('script[data-rl-device-guard]'))return;const s=document.createElement('script');s.src='/offerwall-device-safe-v3.js?v=20260911-v5';s.defer=true;s.dataset.rlDeviceGuard='1';document.head.appendChild(s)})();
+/* Safari session recovery v1 */
+(()=>{ 'use strict';
+if(window.__RL_SAFARI_SESSION_RECOVERY_V1__)return;
+window.__RL_SAFARI_SESSION_RECOVERY_V1__=true;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function getSession(){
+  for(let i=0;i<8;i++){
+    try{
+      const auth=(typeof sb!=='undefined'&&sb?.auth)?sb.auth:window.sb?.auth;
+      if(auth){
+        let r=await auth.getSession();
+        if(r?.data?.session)return r.data.session;
+        try{r=await auth.refreshSession();if(r?.data?.session)return r.data.session}catch(_){}
+      }
+    }catch(_){}
+    await wait(350);
+  }
+  return null;
+}
+async function recover(){
+  const s=await getSession();
+  if(!s?.user)return false;
+  if(typeof window.riselooterLoadOfferwall==='function'){
+    try{await window.riselooterLoadOfferwall()}catch(_){}
+  }
+  return true;
+}
+function boot(){
+  recover();
+  try{
+    const auth=(typeof sb!=='undefined'&&sb?.auth)?sb.auth:window.sb?.auth;
+    if(auth?.onAuthStateChange)auth.onAuthStateChange((event,session)=>{
+      if(session?.user&&(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION'))setTimeout(recover,50);
+    });
+  }catch(_){}
+  [1500,3500,6000].forEach(ms=>setTimeout(recover,ms));
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
