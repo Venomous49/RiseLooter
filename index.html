@@ -2290,6 +2290,9 @@ SUPABASE_URL,
 SUPABASE_KEY
 );
 
+/* Shared auth bootstrap: make every feature wait for the same Supabase initialization. */
+window.__RL_AUTH_READY__ = sb.auth.getSession().catch(()=>({data:{session:null}}));
+
 const $ =
 id => document.getElementById(id);
 
