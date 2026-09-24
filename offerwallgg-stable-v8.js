@@ -10,10 +10,24 @@ function missionsPanel(){let w=$('offerwallActiveMissionsV8');if(w)return w;w=do
 async function session(){
   const auth=(()=>{try{if(typeof sb!=='undefined'&&sb?.auth)return sb.auth}catch(_){}try{return window.sb?.auth}catch(_){}return null})();
   if(!auth?.getSession)return null;
-  for(let i=0;i<16;i++){
+  try{if(window.__RL_AUTH_READY__)await Promise.race([window.__RL_AUTH_READY__,new Promise(r=>setTimeout(r,5000))])}catch(_){}
+  for(let i=0;i<12;i++){
     try{const r=await auth.getSession();if(r?.data?.session?.user)return r.data.session}catch(_){}
-    if(i===3||i===7||i===11){try{const r=await auth.refreshSession();if(r?.data?.session?.user)return r.data.session}catch(_) {}}
-    await new Promise(r=>setTimeout(r,350));
+    if(i===2){
+      try{
+        const key='sb-dvvjujkpnpzerbjxjjsy-auth-token';
+        const raw=window.localStorage?.getItem(key);
+        if(raw){
+          const parsed=JSON.parse(raw),s=parsed?.currentSession||parsed?.session;
+          if(s?.access_token&&s?.refresh_token){
+            const r=await auth.setSession({access_token:s.access_token,refresh_token:s.refresh_token});
+            if(r?.data?.session?.user)return r.data.session;
+          }
+        }
+      }catch(_){}
+    }
+    if(i===5){try{const r=await auth.refreshSession();if(r?.data?.session?.user)return r.data.session}catch(_){}}
+    await new Promise(r=>setTimeout(r,400));
   }
   return null;
 }
